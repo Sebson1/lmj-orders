@@ -42,7 +42,7 @@ const DEFAULT_SETTINGS = {
 const DEFAULT_PRODUCTS = [{
   id: 'lmj-pink-blossom', name: 'LMJ Surface Disinfectant – Pink Blossom', size: '100ml',
   price: Number(process.env.PRODUCT_PRICE || 25), description: 'Kills 99.9% germs. Spray evenly on the surface and allow to air-dry for 30 seconds. Perfect for chairs, handles, toilet seats, tables & more.',
-  image: '/product.jpg', active: true, sort: 1,
+  images: ['/product.jpg'], active: true, sort: 1,
 }];
 
 // ---------- data store ----------
@@ -238,13 +238,34 @@ async function markPaid(orderId, reference, channel) {
   return setStatus(orderId, 'placed', { reference });
 }
 
+// ---------- product images ----------
+// Photos are stored inside the product record as data URLs (max 5). Publicly they are served as
+// /img/<productId>/<n> with long cache headers so the order page stays small and fast.
+const MAX_IMAGES = 5;
+function productImages(p) { return Array.isArray(p.images) ? p.images : (p.image ? [p.image] : []); }
+function publicProduct(p) {
+  const imgs = productImages(p).map((src, i) => src.startsWith('data:') ? `/img/${p.id}/${i}?v=${(p.imgVersion || 0)}` : src);
+  const { image, images, ...rest } = p;
+  return { ...rest, images: imgs, image: imgs[0] || '/product.jpg' };
+}
+function serveProductImage(res, pid, idx) {
+  const p = loadProducts().find(x => x.id === pid);
+  const src = p && productImages(p)[idx];
+  if (!src || !src.startsWith('data:')) { res.writeHead(404); return res.end('Not found'); }
+  const m = src.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+  if (!m) { res.writeHead(404); return res.end('Not found'); }
+  const buf = Buffer.from(m[2], 'base64');
+  res.writeHead(200, { 'Content-Type': m[1], 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=31536000, immutable' });
+  res.end(buf);
+}
+
 // ---------- public config ----------
 function publicConfig() {
   const S = loadSettings();
   return {
     businessName: S.businessName, tagline: S.tagline, deliveryFee: Number(S.deliveryFee) || 0, pickupInfo: S.pickupInfo, footerNote: S.footerNote,
     callPhone: S.callPhone, whatsappPhone: normalizePhone(S.whatsappPhone || S.callPhone), paystack: !!ENV.paystackSecret,
-    products: loadProducts().filter(p => p.active !== false).sort((a, b) => (a.sort || 0) - (b.sort || 0)),
+    products: loadProducts().filter(p => p.active !== false).sort((a, b) => (a.sort || 0) - (b.sort || 0)).map(publicProduct),
   };
 }
 
@@ -372,7 +393,7 @@ async function handleApi(req, res, url) {
     }
 
     // Products
-    if (req.method === 'GET' && p === '/api/admin/products') return json(res, 200, loadProducts().sort((a, b) => (a.sort || 0) - (b.sort || 0)));
+    if (req.method === 'GET' && p === '/api/admin/products') return json(res, 200, loadProducts().sort((a, b) => (a.sort || 0) - (b.sort || 0)).map(publicProduct));
     if (req.method === 'POST' && p === '/api/admin/products') {
       const b = await readJsonBody(req); if (!b) return json(res, 400, { error: 'Invalid request' });
       const products = loadProducts();
@@ -383,7 +404,7 @@ async function handleApi(req, res, url) {
       let prod = b.id ? products.find(x => x.id === b.id) : null;
       if (!prod) {
         let id = slug(name); let n = 1; while (products.some(x => x.id === id)) id = slug(name) + '-' + (++n);
-        prod = { id, sort: products.length + 1, active: true, image: '' };
+        prod = { id, sort: products.length + 1, active: true, images: [] };
         products.push(prod);
       }
       Object.assign(prod, {
@@ -391,12 +412,20 @@ async function handleApi(req, res, url) {
         active: b.active !== false && b.active !== 'false',
         sort: Number(b.sort) || prod.sort,
       });
-      if (typeof b.image === 'string' && (b.image.startsWith('data:image/') || b.image.startsWith('/') || b.image === '')) {
-        if (b.image.length > 1.5 * 1024 * 1024) return json(res, 400, { error: 'Image is too large. Please use a smaller photo.' });
-        prod.image = b.image;
+      if (Array.isArray(b.images)) {
+        const existing = productImages(prod);
+        const next = [];
+        for (const im of b.images.slice(0, MAX_IMAGES)) {
+          if (typeof im !== 'string') continue;
+          const keep = im.match(new RegExp(`^/img/${prod.id}/(\\d+)`));
+          if (keep && existing[+keep[1]]) next.push(existing[+keep[1]]);
+          else if (im.startsWith('data:image/')) { if (im.length > 600 * 1024) return json(res, 400, { error: 'One of the photos is too large. Please use a smaller photo.' }); next.push(im); }
+          else if (im.startsWith('/') && !im.startsWith('/img/')) next.push(im);
+        }
+        prod.images = next; delete prod.image; prod.imgVersion = (prod.imgVersion || 0) + 1;
       }
       await saveProducts(products);
-      return json(res, 200, prod);
+      return json(res, 200, publicProduct(prod));
     }
     const mDel = p.match(/^\/api\/admin\/products\/([a-z0-9-]+)$/);
     if (req.method === 'DELETE' && mDel) {
@@ -445,6 +474,8 @@ const server = http.createServer(async (req, res) => {
       const orderId = ref ? ref.split('-').slice(0, 2).join('-') : '';
       return redirect(res, `/track?id=${orderId}&paid=0`);
     }
+    const mImg = url.pathname.match(/^\/img\/([a-z0-9-]+)\/(\d+)$/);
+    if (mImg) return serveProductImage(res, mImg[1], +mImg[2]);
     if (url.pathname === '/') return serveStatic(res, 'index.html');
     if (url.pathname === '/track') return serveStatic(res, 'track.html');
     if (url.pathname === '/admin') return serveStatic(res, 'admin.html');
