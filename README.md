@@ -66,7 +66,7 @@ Everything is done from `/admin` → **Products** and **Settings** — no code c
 Products, settings and orders are stored in a free Supabase database so nothing is lost when Render restarts the service.
 1. Sign up at https://supabase.com (GitHub login), create a project (any name, region closest to you, e.g. Frankfurt/London).
 2. Open **SQL Editor → New query**, paste the contents of `supabase-setup.sql`, click **Run**.
-3. In **Project Settings → API** copy the **Project URL** and the **service_role** key (keep it secret).
+3. In **Project Settings → API Keys** copy the **secret key** (`sb_secret_…`, click the eye icon to reveal). The Project URL is `https://<project-ref>.supabase.co` (shown under Project Settings → General / Data API).
 4. In Render → your service → **Environment**, set `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` to those values. The service restarts and the logs show `[store] Supabase connected`.
 
 If these are left blank the site falls back to JSON files in `data/`, which Render's free plan wipes on every restart — use **Settings → Download backup / Restore** in that case.

@@ -56,7 +56,7 @@ const MEM = { settings: null, products: null, orders: new Map() };
 
 async function sbFetch(method, query, body) {
   const r = await fetch(`${SB.url}/rest/v1/store${query}`, {
-    method, headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.key, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    method, headers: { apikey: SB.key, ...(SB.key.startsWith('eyJ') ? { Authorization: 'Bearer ' + SB.key } : {}), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!r.ok) throw new Error(`Supabase ${method} ${r.status}: ${(await r.text()).slice(0, 200)}`);
