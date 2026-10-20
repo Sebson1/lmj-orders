@@ -45,24 +45,67 @@ const DEFAULT_PRODUCTS = [{
   image: '/product.jpg', active: true, sort: 1,
 }];
 
-// ---------- tiny JSON store ----------
+// ---------- data store ----------
+// All data lives in memory and is written through to Supabase (free hosted Postgres, via its REST API)
+// when SUPABASE_URL + SUPABASE_SERVICE_KEY are set. Otherwise it falls back to JSON files in ./data.
+// One table:  store(key text primary key, value jsonb, updated_at timestamptz)
+//   key = 'settings' | 'products' | 'order:<ORDER_ID>'
+const SB = { url: (process.env.SUPABASE_URL || '').replace(/\/$/, ''), key: process.env.SUPABASE_SERVICE_KEY || '' };
+const useSupabase = !!(SB.url && SB.key);
+const MEM = { settings: null, products: null, orders: new Map() };
+
+async function sbFetch(method, query, body) {
+  const r = await fetch(`${SB.url}/rest/v1/store${query}`, {
+    method, headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.key, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) throw new Error(`Supabase ${method} ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  return method === 'GET' ? r.json() : null;
+}
 function readJson(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } }
 function writeJson(file, data) { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
-const loadOrders = () => readJson(FILES.orders, []);
-const saveOrders = (o) => writeJson(FILES.orders, o);
-const loadProducts = () => readJson(FILES.products, DEFAULT_PRODUCTS);
-const saveProducts = (p) => writeJson(FILES.products, p);
-const loadSettings = () => ({ ...DEFAULT_SETTINGS, ...readJson(FILES.settings, {}) });
-const saveSettings = (s) => writeJson(FILES.settings, s);
 
-function findOrder(id) { return loadOrders().find(o => o.id === id); }
-function updateOrder(id, fn) {
-  const orders = loadOrders();
-  const o = orders.find(x => x.id === id);
+async function persist(key, value) {
+  if (useSupabase) {
+    await sbFetch('POST', '', { key, value, updated_at: new Date().toISOString() });
+  } else {
+    if (key === 'settings') writeJson(FILES.settings, value);
+    else if (key === 'products') writeJson(FILES.products, value);
+    else writeJson(FILES.orders, [...MEM.orders.values()]);
+  }
+}
+
+async function initStore() {
+  if (useSupabase) {
+    const rows = await sbFetch('GET', '?select=key,value&limit=10000');
+    for (const r of rows) {
+      if (r.key === 'settings') MEM.settings = r.value;
+      else if (r.key === 'products') MEM.products = r.value;
+      else if (r.key.startsWith('order:')) MEM.orders.set(r.value.id, r.value);
+    }
+    log(`[store] Supabase connected – ${MEM.orders.size} orders, ${(MEM.products || DEFAULT_PRODUCTS).length} products`);
+  } else {
+    MEM.settings = readJson(FILES.settings, null);
+    MEM.products = readJson(FILES.products, null);
+    for (const o of readJson(FILES.orders, [])) MEM.orders.set(o.id, o);
+    log('[store] using local JSON files in ./data (set SUPABASE_URL + SUPABASE_SERVICE_KEY for permanent storage)');
+  }
+}
+
+const loadOrders = () => [...MEM.orders.values()];
+const loadProducts = () => JSON.parse(JSON.stringify(MEM.products || DEFAULT_PRODUCTS));
+const loadSettings = () => ({ ...DEFAULT_SETTINGS, ...(MEM.settings || {}) });
+async function saveProducts(p) { MEM.products = p; await persist('products', p); }
+async function saveSettings(s) { MEM.settings = s; await persist('settings', s); }
+async function saveOrder(o) { MEM.orders.set(o.id, o); await persist('order:' + o.id, o); }
+
+function findOrder(id) { return MEM.orders.get(id) || null; }
+async function updateOrder(id, fn) {
+  const o = MEM.orders.get(id);
   if (!o) return null;
   fn(o);
   o.updatedAt = new Date().toISOString();
-  saveOrders(orders);
+  await saveOrder(o);
   return o;
 }
 
@@ -161,7 +204,7 @@ function ownerMessage(o, status) {
 
 async function setStatus(id, status, extra) {
   const S = loadSettings();
-  const o = updateOrder(id, (x) => { x.status = status; x.timeline.push({ status, at: new Date().toISOString(), ...(extra || {}) }); });
+  const o = await updateOrder(id, (x) => { x.status = status; x.timeline.push({ status, at: new Date().toISOString(), ...(extra || {}) }); });
   if (!o) return null;
   await notifyBoth(o.phone, clientMessage(o, status, S));
   if (status === 'placed' || status === 'completed') await notifyBoth(S.ownerPhone, ownerMessage(o, status));
@@ -191,7 +234,7 @@ async function markPaid(orderId, reference, channel) {
   const o = findOrder(orderId);
   if (!o) return null;
   if (o.payment.status === 'paid') return o;
-  updateOrder(orderId, (x) => { x.payment = { ...x.payment, status: 'paid', reference, channel, paidAt: new Date().toISOString() }; });
+  await updateOrder(orderId, (x) => { x.payment = { ...x.payment, status: 'paid', reference, channel, paidAt: new Date().toISOString() }; });
   return setStatus(orderId, 'placed', { reference });
 }
 
@@ -209,7 +252,7 @@ function publicConfig() {
 async function handleApi(req, res, url) {
   const p = url.pathname;
 
-  if (req.method === 'GET' && p === '/api/config') return json(res, 200, publicConfig());
+  if (req.method === 'GET' && p === '/api/config') return json(res, 200, { ...publicConfig(), storage: useSupabase ? 'supabase' : 'file' });
 
   // Create order
   if (req.method === 'POST' && p === '/api/orders') {
@@ -239,19 +282,19 @@ async function handleApi(req, res, url) {
       fulfilment, address, note: String(b.note || '').trim().slice(0, 300), subtotal, deliveryFee, amount,
       status: 'pending_payment', payment: { status: 'unpaid', method: 'paystack' }, timeline: [{ status: 'pending_payment', at: now }], createdAt: now, updatedAt: now,
     };
-    const orders = loadOrders(); orders.push(order); saveOrders(orders);
+    await saveOrder(order);
 
     if (ENV.paystackSecret) {
       try {
         const init = await paystackInit(order);
-        updateOrder(order.id, (x) => { x.payment.reference = init.reference; });
+        await updateOrder(order.id, (x) => { x.payment.reference = init.reference; });
         return json(res, 200, { orderId: order.id, paymentUrl: init.authorization_url });
       } catch (e) {
         log('[Paystack init error]', e.message);
         return json(res, 502, { error: 'Payment could not be started. Please try again or call ' + S.callPhone });
       }
     }
-    updateOrder(order.id, (x) => { x.payment.status = 'pay on pickup/delivery'; });
+    await updateOrder(order.id, (x) => { x.payment.status = 'pay on pickup/delivery'; });
     await setStatus(order.id, 'placed');
     return json(res, 200, { orderId: order.id, paymentUrl: null, trackUrl: `/track?id=${order.id}` });
   }
@@ -311,7 +354,7 @@ async function handleApi(req, res, url) {
     }
     const mPaid = p.match(/^\/api\/admin\/orders\/([A-Z0-9-]+)\/mark-paid$/);
     if (req.method === 'POST' && mPaid) {
-      const o = updateOrder(mPaid[1], (x) => { x.payment.status = 'paid'; x.payment.method = 'manual'; x.payment.paidAt = new Date().toISOString(); });
+      const o = await updateOrder(mPaid[1], (x) => { x.payment.status = 'paid'; x.payment.method = 'manual'; x.payment.paidAt = new Date().toISOString(); });
       if (!o) return json(res, 404, { error: 'Order not found' });
       if (o.status === 'pending_payment') await setStatus(o.id, 'placed');
       return json(res, 200, { ok: true });
@@ -324,7 +367,7 @@ async function handleApi(req, res, url) {
       const S = loadSettings();
       for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) S[k] = k === 'deliveryFee' ? Math.max(0, Number(b[k]) || 0) : String(b[k]).trim().slice(0, 300);
       if (normalizePhone(S.ownerPhone).length < 12) return json(res, 400, { error: 'Owner alert number is not a valid Ghana number.' });
-      saveSettings(S);
+      await saveSettings(S);
       return json(res, 200, S);
     }
 
@@ -352,7 +395,7 @@ async function handleApi(req, res, url) {
         if (b.image.length > 1.5 * 1024 * 1024) return json(res, 400, { error: 'Image is too large. Please use a smaller photo.' });
         prod.image = b.image;
       }
-      saveProducts(products);
+      await saveProducts(products);
       return json(res, 200, prod);
     }
     const mDel = p.match(/^\/api\/admin\/products\/([a-z0-9-]+)$/);
@@ -360,7 +403,7 @@ async function handleApi(req, res, url) {
       const products = loadProducts();
       const i = products.findIndex(x => x.id === mDel[1]);
       if (i < 0) return json(res, 404, { error: 'Product not found' });
-      products.splice(i, 1); saveProducts(products);
+      products.splice(i, 1); await saveProducts(products);
       return json(res, 200, { ok: true });
     }
 
@@ -371,9 +414,9 @@ async function handleApi(req, res, url) {
     }
     if (req.method === 'POST' && p === '/api/admin/restore') {
       const b = await readJsonBody(req); if (!b || typeof b !== 'object') return json(res, 400, { error: 'Invalid backup file' });
-      if (b.settings) saveSettings({ ...DEFAULT_SETTINGS, ...b.settings });
-      if (Array.isArray(b.products)) saveProducts(b.products);
-      if (Array.isArray(b.orders)) { const cur = loadOrders(); const ids = new Set(cur.map(o => o.id)); saveOrders(cur.concat(b.orders.filter(o => !ids.has(o.id)))); }
+      if (b.settings) await saveSettings({ ...DEFAULT_SETTINGS, ...b.settings });
+      if (Array.isArray(b.products)) await saveProducts(b.products);
+      if (Array.isArray(b.orders)) for (const o of b.orders) if (o && o.id && !MEM.orders.has(o.id)) await saveOrder(o);
       return json(res, 200, { ok: true });
     }
   }
@@ -409,7 +452,7 @@ const server = http.createServer(async (req, res) => {
   } catch (e) { log('[error]', e); json(res, 500, { error: 'Server error' }); }
 });
 
-server.listen(ENV.port, () => {
+initStore().catch(e => { log('[store] FAILED to load data:', e.message); }).then(() => server.listen(ENV.port, () => {
   log(`${loadSettings().businessName} order site running at ${ENV.baseUrl}`);
   log(`SMS (mNotify): ${ENV.mnotifyKey ? 'ON' : 'OFF – set MNOTIFY_API_KEY'} | Paystack: ${ENV.paystackSecret ? 'ON' : 'OFF – set PAYSTACK_SECRET_KEY'} | WhatsApp API: ${ENV.waToken ? 'ON' : 'OFF (wa.me links used)'}`);
-});
+}));

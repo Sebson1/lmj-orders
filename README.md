@@ -62,4 +62,11 @@ Orders are saved in `data/orders.json`. On hosts with a temporary filesystem (Re
 ## Changing products, prices and phone numbers
 Everything is done from `/admin` → **Products** and **Settings** — no code changes needed. Changes take effect on the order page immediately.
 
-**Important on Render's free plan:** the server's disk is reset whenever the service is redeployed or restarted, which wipes products, settings and orders you added from the dashboard. After making changes, tap **Settings → Download backup**; if the site is ever reset, use **Restore** to put everything back in seconds. (A paid Render plan with a persistent disk, or a small database, removes this limitation — ask for that upgrade when sales pick up.)
+### Permanent storage (Supabase, free)
+Products, settings and orders are stored in a free Supabase database so nothing is lost when Render restarts the service.
+1. Sign up at https://supabase.com (GitHub login), create a project (any name, region closest to you, e.g. Frankfurt/London).
+2. Open **SQL Editor → New query**, paste the contents of `supabase-setup.sql`, click **Run**.
+3. In **Project Settings → API** copy the **Project URL** and the **service_role** key (keep it secret).
+4. In Render → your service → **Environment**, set `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` to those values. The service restarts and the logs show `[store] Supabase connected`.
+
+If these are left blank the site falls back to JSON files in `data/`, which Render's free plan wipes on every restart — use **Settings → Download backup / Restore** in that case.
