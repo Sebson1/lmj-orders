@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: lmj-orders
+    runtime: node
+    plan: free
+    buildCommand: ""
+    startCommand: node server.js
+    healthCheckPath: /api/config
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: BASE_URL
+        value: https://lmj-orders.onrender.com
+      - key: OWNER_PHONE
+        value: "0535623533"
+      - key: BUSINESS_NAME
+        value: LMJ
+      - key: PRODUCT_PRICE
+        value: "25"
+      - key: DELIVERY_FEE
+        value: "0"
+      - key: MNOTIFY_SENDER_ID
+        value: LMJ
+      - key: ADMIN_KEY
+        generateValue: true
+      - key: MNOTIFY_API_KEY
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Track your order – LMJ</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="brand">
+  <div class="logo">✦ LMJ</div>
+  <h1>TRACK YOUR ORDER</h1>
+</header>
+
+<div class="wrap" style="max-width:560px">
+  <div class="card">
+    <div id="banner"></div>
+
+    <form id="lookup">
+      <label for="id">Order number</label>
+      <input id="id" placeholder="e.g. LMJ-A1B23456" required>
+      <label for="phone">Phone number used for the order</label>
+      <input id="phone" type="tel" placeholder="e.g. 0241234567" required>
+      <div class="error" id="err"></div>
+      <button class="btn" type="submit">🔎 Find my order</button>
+    </form>
+
+    <div id="order" style="display:none">
+      <h2 id="title"></h2>
+      <div id="summary" class="note" style="font-size:15px;color:var(--ink)"></div>
+      <h3>Progress</h3>
+      <ul class="steps" id="steps"></ul>
+      <div id="actions"></div>
+    </div>
+
+    <div class="note" style="text-align:center;margin-top:16px"><a href="/">← Back to shop</a></div>
+  </div>
+</div>
+<footer>Questions? Call <a id="callLink" href="#"></a></footer>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const PH_KEY = 'lmj_phone';
+  if (params.get('id')) $('id').value = params.get('id');
+  const savedPhone = localStorage.getItem(PH_KEY); if (savedPhone) $('phone').value = savedPhone;
+
+  if (params.get('paid') === '1') $('banner').innerHTML = '<div class="success">✅ Payment successful! Your order has been placed. You will receive an SMS/WhatsApp confirmation shortly.</div>';
+  if (params.get('paid') === '0') $('banner').innerHTML = '<div class="error" style="display:block">Payment was not completed. You can try again from the shop page or contact us.</div>';
+
+  const FLOW = [
+    ['placed', 'Order placed', 'We have received your order'],
+    ['accepted', 'Accepted', 'The seller has accepted your order'],
+    ['processing', 'Processing', 'Your order is being prepared'],
+    ['ready', 'Ready', 'Ready for pickup / out for delivery'],
+    ['delivered', 'Delivered', 'Please confirm you received it'],
+    ['completed', 'Completed', 'Order closed. Thank you!'],
+  ];
+
+  async function load(id, phone) {
+    const err = $('err'); err.style.display = 'none';
+    const r = await fetch(`/api/orders/${encodeURIComponent(id.trim().toUpperCase())}?phone=${encodeURIComponent(phone)}`);
+    const o = await r.json();
+    if (!r.ok) { err.textContent = o.error; err.style.display = 'block'; return; }
+    localStorage.setItem(PH_KEY, phone);
+    render(o, phone);
+  }
+
+  function render(o, phone) {
+    $('lookup').style.display = 'none'; $('order').style.display = 'block';
+    $('title').textContent = `Order ${o.id}`;
+    $('callLink').href = 'tel:' + o.ownerPhone; $('callLink').textContent = o.ownerPhone;
+    const fulfil = o.fulfilment === 'delivery' ? `Delivery to ${o.address}` : 'Pickup';
+    $('summary').innerHTML = `<b>${o.qty} × ${o.productName}</b><br>Total: <b>GHS ${o.amount.toFixed(2)}</b> · Payment: <span class="pill ${o.payment.status === 'paid' ? 'paid' : 'unpaid'}">${o.payment.status}</span><br>${fulfil}<br><span style="color:var(--muted)">Placed ${new Date(o.createdAt).toLocaleString()}</span>`;
+
+    const idx = o.status === 'cancelled' ? -1 : FLOW.findIndex(f => f[0] === o.status);
+    $('steps').innerHTML = o.status === 'cancelled'
+      ? '<li class="current"><span class="dot">✕</span><span class="lbl">Cancelled</span></li>'
+      : FLOW.map((f, i) => `<li class="${i < idx ? 'done' : i === idx ? 'current' : ''}"><span class="dot">${i < idx ? '✓' : i + 1}</span><span class="lbl">${f[1]}<small>${f[2]}</small></span></li>`).join('');
+
+    const wa = `https://wa.me/${o.ownerWhatsApp}?text=${encodeURIComponent(`Hello LMJ, this is ${o.name} about order ${o.id} (${o.qty} x ${o.productName}, GHS ${o.amount}).`)}`;
+    let actions = '';
+    if (o.status === 'pending_payment') actions += `<div class="error" style="display:block">Payment not yet received for this order. Contact the seller if you have paid.</div>`;
+    if (['ready', 'delivered'].includes(o.status)) {
+      actions += `<button class="btn" id="confirmBtn">✅ I have received my order</button><div class="note" style="text-align:center">Tap this once you have the item in hand to close the order.</div>`;
+    }
+    if (o.status === 'completed') actions += `<div class="success">🎉 Thank you! Your order is complete.</div>`;
+    actions += `<a class="btn whatsapp" href="${wa}" target="_blank" rel="noopener">💬 Message seller on WhatsApp</a>`;
+    actions += `<a class="btn secondary" href="/">🛒 Order again</a>`;
+    $('actions').innerHTML = actions;
+
+    const cb = $('confirmBtn');
+    if (cb) cb.onclick = async () => {
+      cb.disabled = true; cb.textContent = 'Confirming…';
+      const r = await fetch(`/api/orders/${o.id}/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
+      const d = await r.json();
+      if (!r.ok) { alert(d.error); cb.disabled = false; cb.textContent = '✅ I have received my order'; return; }
+      render({ ...d.order, ownerWhatsApp: o.ownerWhatsApp, ownerPhone: o.ownerPhone, productName: o.productName }, phone);
+    };
+  }
+
+  $('lookup').onsubmit = (e) => { e.preventDefault(); load($('id').value, $('phone').value); };
+  if (params.get('id') && savedPhone) load(params.get('id'), savedPhone);
+})();
+</script>
+</body>
+</html>

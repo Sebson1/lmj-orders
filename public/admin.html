@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>LMJ – Owner Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="brand">
+  <div class="logo">✦ LMJ</div>
+  <h1>OWNER DASHBOARD</h1>
+</header>
+
+<div class="wrap">
+  <div class="card" id="login">
+    <h2>Sign in</h2>
+    <label for="key">Admin password</label>
+    <input id="key" type="password" placeholder="ADMIN_KEY from your .env">
+    <div class="error" id="err"></div>
+    <button class="btn" id="loginBtn">Open dashboard</button>
+  </div>
+
+  <div id="dash" style="display:none">
+    <div class="stats" id="stats"></div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0">Orders</h2>
+        <div>
+          <select id="filter" style="width:auto;padding:8px 12px">
+            <option value="open">Open orders</option>
+            <option value="all">All orders</option>
+            <option value="completed">Completed</option>
+          </select>
+          <button class="btn small ghost" id="refresh">↻ Refresh</button>
+          <button class="btn small ghost" id="logout">Sign out</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;margin-top:12px">
+        <table>
+          <thead><tr><th>Order</th><th>Customer</th><th class="hide-m">Details</th><th>Payment</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="note">Every status change automatically sends the customer an SMS (mNotify) and a WhatsApp message. Use the 💬 button to open a WhatsApp chat with the customer yourself. The list refreshes every 30 seconds.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const KEY = 'lmj_admin_key';
+  let key = sessionStorage.getItem(KEY) || '';
+  let DATA = null;
+
+  const NEXT = { pending_payment: ['placed', 'cancelled'], placed: ['accepted', 'cancelled'], accepted: ['processing', 'cancelled'], processing: ['ready', 'cancelled'], ready: ['delivered', 'completed'], delivered: ['completed'], completed: [], cancelled: ['placed'] };
+  const BTN = { placed: 'Mark placed', accepted: '✔ Accept', processing: '⚙ Processing', ready: '📦 Ready', delivered: '🛵 Delivered', completed: '✅ Close', cancelled: '✕ Cancel' };
+
+  async function api(path, opts = {}) {
+    const r = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'x-admin-key': key, ...(opts.headers || {}) } });
+    const d = await r.json();
+    if (r.status === 401) { sessionStorage.removeItem(KEY); key = ''; show(false); throw new Error('Wrong password'); }
+    if (!r.ok) throw new Error(d.error || 'Error');
+    return d;
+  }
+  function show(ok) { $('login').style.display = ok ? 'none' : 'block'; $('dash').style.display = ok ? 'block' : 'none'; }
+  function normalize(p) { let d = String(p).replace(/\D/g, ''); if (d.startsWith('0') && d.length === 10) d = '233' + d.slice(1); return d; }
+
+  async function load() {
+    try { DATA = await api('/api/admin/orders'); show(true); render(); }
+    catch (e) { $('err').textContent = e.message; $('err').style.display = 'block'; }
+  }
+
+  function render() {
+    const f = $('filter').value;
+    const open = DATA.orders.filter(o => !['completed', 'cancelled'].includes(o.status));
+    const today = new Date().toDateString();
+    const revenue = DATA.orders.filter(o => o.payment.status === 'paid').reduce((s, o) => s + o.amount, 0);
+    $('stats').innerHTML = `
+      <div><b>${open.length}</b><span>Open orders</span></div>
+      <div><b>${DATA.orders.filter(o => new Date(o.createdAt).toDateString() === today).length}</b><span>Orders today</span></div>
+      <div><b>${DATA.orders.filter(o => o.status === 'completed').length}</b><span>Completed</span></div>
+      <div><b>GHS ${revenue.toFixed(0)}</b><span>Paid via Paystack</span></div>`;
+
+    const list = f === 'open' ? open : f === 'completed' ? DATA.orders.filter(o => o.status === 'completed') : DATA.orders;
+    $('rows').innerHTML = list.length ? list.map(o => {
+      const paid = o.payment.status === 'paid';
+      const wa = `https://wa.me/${normalize(o.phone)}?text=${encodeURIComponent(`Hello ${o.name}, this is LMJ about your order ${o.id} (${o.qty} x LMJ Surface Disinfectant, GHS ${o.amount}). `)}`;
+      const btns = NEXT[o.status].map(s => `<button class="btn small ${s === 'cancelled' ? 'ghost' : ''}" data-id="${o.id}" data-status="${s}">${BTN[s]}</button>`).join('');
+      const markPaid = !paid ? `<button class="btn small ghost" data-id="${o.id}" data-paid="1">💵 Mark paid</button>` : '';
+      return `<tr>
+        <td><b>${o.id}</b><br><small style="color:var(--muted)">${new Date(o.createdAt).toLocaleString()}</small></td>
+        <td>${o.name}<br><a href="tel:${o.phone}">${o.phone}</a> <a href="${wa}" target="_blank" rel="noopener" title="WhatsApp">💬</a></td>
+        <td class="hide-m">${o.qty} × bottle · <b>GHS ${o.amount}</b><br>${o.fulfilment === 'delivery' ? '🛵 ' + o.address : '🏪 Pickup'}${o.note ? '<br><i>' + o.note + '</i>' : ''}</td>
+        <td><span class="pill ${paid ? 'paid' : 'unpaid'}">${o.payment.status}</span>${o.payment.reference ? '<br><small>' + o.payment.reference + '</small>' : ''}</td>
+        <td><span class="pill ${o.status}">${DATA.labels[o.status] || o.status}</span></td>
+        <td>${btns}${markPaid}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted)">No orders here yet.</td></tr>';
+
+    $('rows').querySelectorAll('button[data-status]').forEach(b => b.onclick = async () => {
+      if (b.dataset.status === 'cancelled' && !confirm('Cancel order ' + b.dataset.id + '?')) return;
+      b.disabled = true; b.textContent = 'Sending…';
+      try { await api(`/api/admin/orders/${b.dataset.id}/status`, { method: 'POST', body: JSON.stringify({ status: b.dataset.status }) }); await load(); }
+      catch (e) { alert(e.message); b.disabled = false; }
+    });
+    $('rows').querySelectorAll('button[data-paid]').forEach(b => b.onclick = async () => {
+      if (!confirm('Mark order ' + b.dataset.id + ' as paid (cash/MoMo received manually)?')) return;
+      try { await api(`/api/admin/orders/${b.dataset.id}/mark-paid`, { method: 'POST' }); await load(); } catch (e) { alert(e.message); }
+    });
+  }
+
+  $('loginBtn').onclick = () => { key = $('key').value; sessionStorage.setItem(KEY, key); load(); };
+  $('key').onkeydown = (e) => { if (e.key === 'Enter') $('loginBtn').click(); };
+  $('refresh').onclick = load;
+  $('filter').onchange = render;
+  $('logout').onclick = () => { sessionStorage.removeItem(KEY); key = ''; show(false); };
+  if (key) load();
+  setInterval(() => { if (key && $('dash').style.display !== 'none') load(); }, 30000);
+})();
+</script>
+</body>
+</html>
