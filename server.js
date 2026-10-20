@@ -14,7 +14,8 @@ const CFG = {
   port: Number(process.env.PORT || 3000),
   baseUrl: (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, ''),
   adminKey: process.env.ADMIN_KEY || 'change-me',
-  ownerPhone: process.env.OWNER_PHONE || '0535623533',
+  ownerPhone: process.env.OWNER_PHONE || '0558527351',          // receives order SMS/WhatsApp alerts
+  contactPhone: process.env.CONTACT_PHONE || process.env.OWNER_PHONE || '0535623533', // shown to customers (call / WhatsApp)
   businessName: process.env.BUSINESS_NAME || 'LMJ',
   productName: process.env.PRODUCT_NAME || 'LMJ Surface Disinfectant (Pink Blossom, 100ml)',
   price: Number(process.env.PRODUCT_PRICE || 25),
@@ -145,13 +146,13 @@ function clientMessage(o, status) {
     case 'ready':
       return o.fulfilment === 'delivery'
         ? `${CFG.businessName}: your order ${o.id} is READY and out for delivery to ${o.address}. ${t}`
-        : `${CFG.businessName}: your order ${o.id} is READY FOR PICKUP. Call ${CFG.ownerPhone} to arrange. ${t}`;
+        : `${CFG.businessName}: your order ${o.id} is READY FOR PICKUP. Call ${CFG.contactPhone} to arrange. ${t}`;
     case 'delivered':
       return `${CFG.businessName}: order ${o.id} has been delivered. Please confirm you received it to close the order: ${t}`;
     case 'completed':
       return `Thank you ${o.name}! Order ${o.id} is now complete. We appreciate your purchase of ${CFG.productName}.`;
     case 'cancelled':
-      return `${CFG.businessName}: order ${o.id} has been cancelled. Call ${CFG.ownerPhone} if you have questions.`;
+      return `${CFG.businessName}: order ${o.id} has been cancelled. Call ${CFG.contactPhone} if you have questions.`;
     default: return `${CFG.businessName}: order ${o.id} status: ${STATUS_LABEL[status] || status}. ${t}`;
   }
 }
@@ -217,7 +218,7 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && p === '/api/config') {
     return json(res, 200, {
       price: CFG.price, deliveryFee: CFG.deliveryFee, productName: CFG.productName,
-      ownerPhone: CFG.ownerPhone, ownerWhatsApp: normalizePhone(CFG.ownerPhone),
+      ownerPhone: CFG.contactPhone, ownerWhatsApp: normalizePhone(CFG.contactPhone),
       paystack: !!CFG.paystackSecret, businessName: CFG.businessName,
     });
   }
@@ -251,7 +252,7 @@ async function handleApi(req, res, url) {
         return json(res, 200, { orderId: order.id, paymentUrl: init.authorization_url });
       } catch (e) {
         log('[Paystack init error]', e.message);
-        return json(res, 502, { error: 'Payment could not be started. Please try again or call ' + CFG.ownerPhone });
+        return json(res, 502, { error: 'Payment could not be started. Please try again or call ' + CFG.contactPhone });
       }
     }
     // Paystack not configured yet → place the order directly (owner collects payment manually)
@@ -267,7 +268,7 @@ async function handleApi(req, res, url) {
     if (!o) return json(res, 404, { error: 'Order not found' });
     const ph = url.searchParams.get('phone');
     if (ph && normalizePhone(ph) !== normalizePhone(o.phone)) return json(res, 403, { error: 'Phone number does not match this order.' });
-    return json(res, 200, { ...o, statusLabel: STATUS_LABEL[o.status], ownerWhatsApp: normalizePhone(CFG.ownerPhone), ownerPhone: CFG.ownerPhone, productName: CFG.productName });
+    return json(res, 200, { ...o, statusLabel: STATUS_LABEL[o.status], ownerWhatsApp: normalizePhone(CFG.contactPhone), ownerPhone: CFG.contactPhone, productName: CFG.productName });
   }
 
   // Public: customer confirms delivery → closes order

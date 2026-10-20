@@ -12,6 +12,8 @@ services:
       - key: BASE_URL
         value: https://lmj-orders.onrender.com
       - key: OWNER_PHONE
+        value: "0558527351"
+      - key: CONTACT_PHONE
         value: "0535623533"
       - key: BUSINESS_NAME
         value: LMJ
