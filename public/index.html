@@ -3,37 +3,39 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LMJ Surface Disinfectant – Pink Blossom | Order Online</title>
+<title>LMJ – Order Online</title>
 <meta name="description" content="LMJ Surface Disinfectant (Pink Blossom, 100ml) kills 99.9% of germs. Order online, pay with Paystack, get it by pickup or delivery.">
 <meta property="og:title" content="LMJ Surface Disinfectant – Pink Blossom">
-<meta property="og:description" content="Kills 99.9% germs. GHS 25 for 100ml. Order online now – pickup or delivery.">
+<meta property="og:description" content="Kills 99.9% germs. Order online now – pickup or delivery.">
 <meta property="og:image" content="/product.jpg">
-<meta property="og:type" content="product">
+<meta property="og:type" content="website">
 <link rel="stylesheet" href="/style.css">
+<style>
+  .product { display: grid; grid-template-columns: 96px 1fr; gap: 14px; align-items: center; padding: 12px; border: 1.5px solid var(--pink-100); border-radius: 14px; background: var(--white); margin-bottom: 10px; }
+  .product img { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; background: var(--pink-50); }
+  .product .name { font-weight: 800; color: var(--pink-900); }
+  .product .desc { font-size: 13px; color: var(--muted); margin: 2px 0 6px; }
+  .product .bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .product .p { font-weight: 900; font-size: 18px; color: var(--pink-900); }
+  .product .qty button { width: 36px; height: 36px; font-size: 18px; }
+  .product .qty input { width: 48px; height: 36px; padding: 0; font-size: 15px; }
+  .product.selected { border-color: var(--pink-500); background: var(--pink-50); }
+  .hero.single img { max-height: 70vh; object-fit: contain; }
+</style>
 </head>
 <body>
 <header class="brand">
-  <div class="logo">✦ LMJ</div>
-  <h1>SURFACE DISINFECTANT</h1>
-  <div class="tag">PINK BLOSSOM</div>
+  <div class="logo" id="bizName">✦ LMJ</div>
+  <div class="tag" id="tagline">ORDER ONLINE</div>
 </header>
 
 <div class="wrap">
   <div class="grid">
-    <section class="hero">
-      <img src="/product.jpg" alt="LMJ Surface Disinfectant Pink Blossom 100ml">
-    </section>
+    <section class="hero" id="hero"><img src="/product.jpg" alt="Product"></section>
 
     <section class="card">
-      <span class="badge">🛡️ Kills 99.9% germs</span>
-      <h2 style="margin-top:12px">Order yours today</h2>
-      <div class="price" id="priceLine">GHS 25 <small>per 100ml bottle</small></div>
-      <div class="features">
-        <div>🪑 Chairs & tables</div>
-        <div>🚪 Door handles</div>
-        <div>🚽 Toilet seats</div>
-        <div>✨ Spray & air-dry 30s</div>
-      </div>
+      <h2 style="margin-top:0">Choose your products</h2>
+      <div id="products"></div>
 
       <form id="orderForm" autocomplete="on">
         <label for="name">Your name</label>
@@ -46,18 +48,12 @@
         <label for="email">Email (optional, for your payment receipt)</label>
         <input id="email" name="email" type="email" placeholder="you@example.com">
 
-        <label>Quantity</label>
-        <div class="qty">
-          <button type="button" id="minus">−</button>
-          <input id="qty" name="qty" type="number" min="1" max="500" value="1">
-          <button type="button" id="plus">+</button>
-        </div>
-
         <label>How would you like to receive it?</label>
         <div class="choice">
           <label><input type="radio" name="fulfilment" value="pickup" checked><span>🏪 Pickup</span></label>
           <label><input type="radio" name="fulfilment" value="delivery"><span>🛵 Delivery</span></label>
         </div>
+        <div class="note" id="pickupInfo" style="display:none"></div>
 
         <div id="addressWrap" style="display:none">
           <label for="address">Delivery address / landmark</label>
@@ -67,69 +63,88 @@
         <label for="note">Note to seller (optional)</label>
         <textarea id="note" name="note" placeholder="Any instructions…"></textarea>
 
-        <div class="total"><span>Total</span><span id="total">GHS 25.00</span></div>
+        <div class="total"><span>Total</span><span id="total">GHS 0.00</span></div>
         <div class="error" id="err"></div>
         <button class="btn" id="submitBtn" type="submit">💳 Pay with Paystack & place order</button>
-        <div class="note" style="text-align:center">Secure payment by card, MoMo or bank transfer via Paystack.</div>
+        <div class="note" id="payNote" style="text-align:center">Secure payment by card, MoMo or bank transfer via Paystack.</div>
       </form>
 
-      <a class="btn secondary" id="callBtn" href="tel:0535623533">📞 Call to order</a>
+      <a class="btn secondary" id="callBtn" href="#">📞 Call to order</a>
       <a class="btn whatsapp" id="waBtn" href="#" target="_blank" rel="noopener">💬 Chat on WhatsApp</a>
       <div class="note" style="text-align:center"><a href="/track">Already ordered? Track your order →</a></div>
     </section>
   </div>
 </div>
 
-<footer>100ml • Surface Disinfectant • Keep out of reach of children. Use as directed.</footer>
+<footer id="footer"></footer>
 
 <script>
 (async function () {
-  const cfg = await fetch('/api/config').then(r => r.json());
-  const price = cfg.price, delFee = cfg.deliveryFee;
   const $ = (id) => document.getElementById(id);
-  $('priceLine').innerHTML = `GHS ${price} <small>per 100ml bottle</small>`;
-  $('callBtn').href = 'tel:' + cfg.ownerPhone;
-  $('callBtn').textContent = '📞 Call to order: ' + cfg.ownerPhone;
-  $('waBtn').href = `https://wa.me/${cfg.ownerWhatsApp}?text=${encodeURIComponent('Hello LMJ, I would like to order ' + cfg.productName)}`;
-  if (!cfg.paystack) {
-    $('submitBtn').textContent = '🛒 Place order';
-    document.querySelector('#orderForm .note:last-of-type').textContent = 'Pay on pickup or delivery.';
-  }
+  const cfg = await fetch('/api/config').then(r => r.json());
+  const P = cfg.products;
+  document.title = cfg.businessName + ' – Order Online';
+  $('bizName').textContent = '✦ ' + cfg.businessName;
+  $('tagline').textContent = (cfg.tagline || 'Order online').toUpperCase();
+  $('footer').textContent = cfg.footerNote || '';
+  $('callBtn').href = 'tel:' + cfg.callPhone; $('callBtn').textContent = '📞 Call to order: ' + cfg.callPhone;
+  if (cfg.pickupInfo) { $('pickupInfo').textContent = '🏪 ' + cfg.pickupInfo; $('pickupInfo').style.display = 'block'; }
+  if (!cfg.paystack) { $('submitBtn').textContent = '🛒 Place order'; $('payNote').textContent = 'Pay on pickup or delivery.'; }
+
+  // hero: first product image
+  if (P[0] && P[0].image) { $('hero').querySelector('img').src = P[0].image; if (P.length === 1) $('hero').classList.add('single'); }
+
+  const qtys = {};
+  P.forEach((p, i) => { qtys[p.id] = (P.length === 1 && i === 0) ? 1 : 0; });
+  $('products').innerHTML = P.length ? P.map(p => `
+    <div class="product" id="prod-${p.id}">
+      <img src="${p.image || '/product.jpg'}" alt="${p.name}">
+      <div>
+        <div class="name">${p.name}${p.size ? ' <small style="font-weight:600;color:var(--muted)">' + p.size + '</small>' : ''}</div>
+        <div class="desc">${p.description || ''}</div>
+        <div class="bottom">
+          <span class="p">GHS ${Number(p.price).toFixed(2)}</span>
+          <span class="qty"><button type="button" data-id="${p.id}" data-d="-1">−</button><input type="number" min="0" max="500" value="${qtys[p.id]}" data-id="${p.id}"><button type="button" data-id="${p.id}" data-d="1">+</button></span>
+        </div>
+      </div>
+    </div>`).join('') : '<div class="note">No products available right now. Please check back soon.</div>';
 
   const fulfil = () => document.querySelector('input[name=fulfilment]:checked').value;
   function recalc() {
-    const q = Math.max(1, parseInt($('qty').value, 10) || 1);
-    $('qty').value = q;
-    const t = q * price + (fulfil() === 'delivery' ? delFee : 0);
-    $('total').textContent = 'GHS ' + t.toFixed(2) + (fulfil() === 'delivery' && delFee ? ` (incl. GHS ${delFee} delivery)` : '');
+    let sub = 0;
+    P.forEach(p => { sub += qtys[p.id] * Number(p.price); $('prod-' + p.id).classList.toggle('selected', qtys[p.id] > 0); });
+    const del = fulfil() === 'delivery' ? cfg.deliveryFee : 0;
+    $('total').textContent = 'GHS ' + (sub + del).toFixed(2) + (del ? ` (incl. GHS ${del} delivery)` : '');
   }
-  $('minus').onclick = () => { $('qty').value = Math.max(1, (+$('qty').value) - 1); recalc(); };
-  $('plus').onclick = () => { $('qty').value = (+$('qty').value) + 1; recalc(); };
-  $('qty').oninput = recalc;
-  document.querySelectorAll('input[name=fulfilment]').forEach(r => r.onchange = () => {
-    $('addressWrap').style.display = fulfil() === 'delivery' ? 'block' : 'none'; recalc();
+  $('products').addEventListener('click', e => {
+    const b = e.target.closest('button[data-id]'); if (!b) return;
+    const id = b.dataset.id; qtys[id] = Math.max(0, Math.min(500, qtys[id] + Number(b.dataset.d)));
+    document.querySelector(`input[data-id="${id}"]`).value = qtys[id]; recalc();
   });
+  $('products').addEventListener('input', e => {
+    const i = e.target.closest('input[data-id]'); if (!i) return;
+    qtys[i.dataset.id] = Math.max(0, Math.min(500, parseInt(i.value, 10) || 0)); recalc();
+  });
+  document.querySelectorAll('input[name=fulfilment]').forEach(r => r.onchange = () => { $('addressWrap').style.display = fulfil() === 'delivery' ? 'block' : 'none'; recalc(); });
   recalc();
 
   $('orderForm').onsubmit = async (e) => {
     e.preventDefault();
     const err = $('err'); err.style.display = 'none';
-    const btn = $('submitBtn'); btn.disabled = true; btn.textContent = 'Please wait…';
-    const body = {
-      name: $('name').value, phone: $('phone').value, email: $('email').value,
-      qty: $('qty').value, fulfilment: fulfil(), address: $('address').value, note: $('note').value,
-    };
+    const items = P.filter(p => qtys[p.id] > 0).map(p => ({ id: p.id, qty: qtys[p.id] }));
+    if (!items.length) { err.textContent = 'Please choose at least one product.'; err.style.display = 'block'; return; }
+    const btn = $('submitBtn'); const label = btn.textContent; btn.disabled = true; btn.textContent = 'Please wait…';
+    const body = { name: $('name').value, phone: $('phone').value, email: $('email').value, items, fulfilment: fulfil(), address: $('address').value, note: $('note').value };
     try {
       const r = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Something went wrong');
-      if (data.paymentUrl) { location.href = data.paymentUrl; return; }
-      location.href = data.trackUrl || ('/track?id=' + data.orderId);
-    } catch (ex) {
-      err.textContent = ex.message; err.style.display = 'block';
-      btn.disabled = false; btn.textContent = cfg.paystack ? '💳 Pay with Paystack & place order' : '🛒 Place order';
-    }
+      location.href = data.paymentUrl || data.trackUrl || ('/track?id=' + data.orderId);
+    } catch (ex) { err.textContent = ex.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = label; }
   };
+
+  const waText = 'Hello ' + cfg.businessName + ', I would like to place an order.';
+  $('waBtn').href = `https://wa.me/${cfg.whatsappPhone}?text=${encodeURIComponent(waText)}`;
 })();
 </script>
 </body>

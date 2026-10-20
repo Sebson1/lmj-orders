@@ -72,14 +72,15 @@
     $('title').textContent = `Order ${o.id}`;
     $('callLink').href = 'tel:' + o.ownerPhone; $('callLink').textContent = o.ownerPhone;
     const fulfil = o.fulfilment === 'delivery' ? `Delivery to ${o.address}` : 'Pickup';
-    $('summary').innerHTML = `<b>${o.qty} × ${o.productName}</b><br>Total: <b>GHS ${o.amount.toFixed(2)}</b> · Payment: <span class="pill ${o.payment.status === 'paid' ? 'paid' : 'unpaid'}">${o.payment.status}</span><br>${fulfil}<br><span style="color:var(--muted)">Placed ${new Date(o.createdAt).toLocaleString()}</span>`;
+    const items = (o.items || [{ name: o.productName, qty: o.qty }]).map(i => `<b>${i.qty} × ${i.name}</b>`).join('<br>');
+    $('summary').innerHTML = `${items}<br>Total: <b>GHS ${o.amount.toFixed(2)}</b>${o.deliveryFee ? ' (incl. GHS ' + o.deliveryFee + ' delivery)' : ''} · Payment: <span class="pill ${o.payment.status === 'paid' ? 'paid' : 'unpaid'}">${o.payment.status}</span><br>${fulfil}<br><span style="color:var(--muted)">Placed ${new Date(o.createdAt).toLocaleString()}</span>`;
 
     const idx = o.status === 'cancelled' ? -1 : FLOW.findIndex(f => f[0] === o.status);
     $('steps').innerHTML = o.status === 'cancelled'
       ? '<li class="current"><span class="dot">✕</span><span class="lbl">Cancelled</span></li>'
       : FLOW.map((f, i) => `<li class="${i < idx ? 'done' : i === idx ? 'current' : ''}"><span class="dot">${i < idx ? '✓' : i + 1}</span><span class="lbl">${f[1]}<small>${f[2]}</small></span></li>`).join('');
 
-    const wa = `https://wa.me/${o.ownerWhatsApp}?text=${encodeURIComponent(`Hello LMJ, this is ${o.name} about order ${o.id} (${o.qty} x ${o.productName}, GHS ${o.amount}).`)}`;
+    const wa = `https://wa.me/${o.ownerWhatsApp}?text=${encodeURIComponent(`Hello ${o.businessName}, this is ${o.name} about order ${o.id} (GHS ${o.amount}).`)}`;
     let actions = '';
     if (o.status === 'pending_payment') actions += `<div class="error" style="display:block">Payment not yet received for this order. Contact the seller if you have paid.</div>`;
     if (['ready', 'delivered'].includes(o.status)) {
@@ -96,7 +97,7 @@
       const r = await fetch(`/api/orders/${o.id}/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
       const d = await r.json();
       if (!r.ok) { alert(d.error); cb.disabled = false; cb.textContent = '✅ I have received my order'; return; }
-      render({ ...d.order, ownerWhatsApp: o.ownerWhatsApp, ownerPhone: o.ownerPhone, productName: o.productName }, phone);
+      render({ ...d.order, ownerWhatsApp: o.ownerWhatsApp, ownerPhone: o.ownerPhone, businessName: o.businessName }, phone);
     };
   }
 

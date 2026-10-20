@@ -10,7 +10,7 @@ Share the site link on Facebook, Instagram, TikTok, WhatsApp status etc. — the
 |---|---|---|
 | `/` | Customers | Product page + order form → Paystack payment |
 | `/track?id=…` | Customers | Live order progress; **"I have received my order"** button closes the order |
-| `/admin` | Owner | Password-protected dashboard: accept → processing → ready → delivered; mark paid; WhatsApp the customer |
+| `/admin` | Owner | Password-protected dashboard with three tabs: **Orders** (accept → processing → ready → delivered, mark paid, WhatsApp the customer), **Products** (add/edit/hide products with photo, price, size, description), **Settings** (business name, tagline, owner alert number, call number, WhatsApp number, delivery fee, pickup info) plus backup/restore |
 
 ## Order flow & messages
 
@@ -59,5 +59,7 @@ Any Node host works. Easiest free/cheap options:
 
 Orders are saved in `data/orders.json`. On hosts with a temporary filesystem (Render free tier), add a persistent disk mounted at `/data` or back the file up regularly.
 
-## Changing price or product text
-Edit `.env`: `PRODUCT_PRICE`, `DELIVERY_FEE`, `PRODUCT_NAME`, `BUSINESS_NAME`. The product picture is `public/product.jpg`.
+## Changing products, prices and phone numbers
+Everything is done from `/admin` → **Products** and **Settings** — no code changes needed. Changes take effect on the order page immediately.
+
+**Important on Render's free plan:** the server's disk is reset whenever the service is redeployed or restarted, which wipes products, settings and orders you added from the dashboard. After making changes, tap **Settings → Download backup**; if the site is ever reset, use **Restore** to put everything back in seconds. (A paid Render plan with a persistent disk, or a small database, removes this limitation — ask for that upgrade when sales pick up.)

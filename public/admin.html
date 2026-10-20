@@ -4,8 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>LMJ – Owner Dashboard</title>
+<title>Owner Dashboard</title>
 <link rel="stylesheet" href="/style.css">
+<style>
+  .tabs { display: flex; gap: 6px; margin: 0 0 14px; }
+  .tabs button { flex: 1; padding: 10px; border: 1.5px solid var(--pink-300); background: var(--white); color: var(--pink-900); border-radius: 999px; font-weight: 800; cursor: pointer; }
+  .tabs button.on { background: var(--pink-900); color: #fff; border-color: var(--pink-900); }
+  .plist { display: grid; gap: 10px; }
+  .pcard { display: grid; grid-template-columns: 72px 1fr auto; gap: 12px; align-items: center; border: 1px solid var(--pink-100); border-radius: 12px; padding: 10px; background: var(--white); }
+  .pcard img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; background: var(--pink-50); }
+  .pcard.off { opacity: .55; }
+  .imgpick { display: flex; gap: 12px; align-items: center; }
+  .imgpick img { width: 90px; height: 90px; object-fit: cover; border-radius: 10px; border: 1.5px dashed var(--pink-300); background: var(--pink-50); }
+  .toggle { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-top: 12px; }
+  .toggle input { width: 20px; height: 20px; }
+</style>
 </head>
 <body>
 <header class="brand">
@@ -17,33 +30,99 @@
   <div class="card" id="login">
     <h2>Sign in</h2>
     <label for="key">Admin password</label>
-    <input id="key" type="password" placeholder="ADMIN_KEY from your .env">
+    <input id="key" type="password" placeholder="Your admin password">
     <div class="error" id="err"></div>
     <button class="btn" id="loginBtn">Open dashboard</button>
   </div>
 
   <div id="dash" style="display:none">
-    <div class="stats" id="stats"></div>
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <h2 style="margin:0">Orders</h2>
-        <div>
-          <select id="filter" style="width:auto;padding:8px 12px">
-            <option value="open">Open orders</option>
-            <option value="all">All orders</option>
-            <option value="completed">Completed</option>
-          </select>
-          <button class="btn small ghost" id="refresh">↻ Refresh</button>
-          <button class="btn small ghost" id="logout">Sign out</button>
+    <div class="tabs">
+      <button class="on" data-tab="orders">📦 Orders</button>
+      <button data-tab="products">🛍️ Products</button>
+      <button data-tab="settings">⚙️ Settings</button>
+    </div>
+
+    <!-- ORDERS -->
+    <div id="tab-orders">
+      <div class="stats" id="stats"></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h2 style="margin:0">Orders</h2>
+          <div>
+            <select id="filter" style="width:auto;padding:8px 12px"><option value="open">Open orders</option><option value="all">All orders</option><option value="completed">Completed</option></select>
+            <button class="btn small ghost" id="refresh">↻ Refresh</button>
+            <button class="btn small ghost" id="logout">Sign out</button>
+          </div>
         </div>
+        <div style="overflow-x:auto;margin-top:12px">
+          <table>
+            <thead><tr><th>Order</th><th>Customer</th><th class="hide-m">Details</th><th>Payment</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div class="note">Every status change automatically sends the customer an SMS and WhatsApp message. Use 💬 to open a WhatsApp chat with the customer. The list refreshes every 30 seconds.</div>
       </div>
-      <div style="overflow-x:auto;margin-top:12px">
-        <table>
-          <thead><tr><th>Order</th><th>Customer</th><th class="hide-m">Details</th><th>Payment</th><th>Status</th><th>Action</th></tr></thead>
-          <tbody id="rows"></tbody>
-        </table>
+    </div>
+
+    <!-- PRODUCTS -->
+    <div id="tab-products" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h2 style="margin:0">Products</h2>
+          <button class="btn small" id="newProduct">+ Add product</button>
+        </div>
+        <div class="plist" id="plist" style="margin-top:12px"></div>
       </div>
-      <div class="note">Every status change automatically sends the customer an SMS (mNotify) and a WhatsApp message. Use the 💬 button to open a WhatsApp chat with the customer yourself. The list refreshes every 30 seconds.</div>
+
+      <div class="card" id="pform" style="display:none;margin-top:14px">
+        <h2 id="pformTitle">Add product</h2>
+        <input type="hidden" id="p_id">
+        <label>Product name</label><input id="p_name" placeholder="e.g. LMJ Hand Sanitizer">
+        <div class="row">
+          <div><label>Price (GHS)</label><input id="p_price" type="number" min="0" step="0.5" placeholder="25"></div>
+          <div><label>Size / pack (optional)</label><input id="p_size" placeholder="e.g. 100ml"></div>
+        </div>
+        <label>Description</label><textarea id="p_desc" placeholder="What it does, how to use it…"></textarea>
+        <label>Photo</label>
+        <div class="imgpick">
+          <img id="p_preview" src="" alt="">
+          <div>
+            <input type="file" id="p_file" accept="image/*" style="padding:8px">
+            <div class="note">Tap to take a photo or choose from gallery. It is resized automatically.</div>
+          </div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="p_active" checked> Show on the order page</label>
+        <div class="error" id="perr"></div>
+        <button class="btn" id="saveProduct">💾 Save product</button>
+        <button class="btn secondary" id="cancelProduct">Cancel</button>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="tab-settings" style="display:none">
+      <div class="card">
+        <h2>Business settings</h2>
+        <label>Business name</label><input id="s_businessName">
+        <label>Tagline (shown under the name)</label><input id="s_tagline" placeholder="e.g. Kills 99.9% germs">
+        <h3>Phone numbers</h3>
+        <label>Owner alert number (receives every order by SMS + WhatsApp)</label><input id="s_ownerPhone" type="tel">
+        <label>"Call to order" number shown to customers</label><input id="s_callPhone" type="tel">
+        <label>WhatsApp number customers chat with</label><input id="s_whatsappPhone" type="tel">
+        <h3>Delivery & pickup</h3>
+        <label>Delivery fee (GHS) – 0 for free delivery</label><input id="s_deliveryFee" type="number" min="0" step="0.5">
+        <label>Pickup info (shown to customers choosing pickup)</label><input id="s_pickupInfo" placeholder="e.g. Pickup at Madina, near the market, 8am–6pm">
+        <label>Footer note</label><input id="s_footerNote">
+        <div class="error" id="serr"></div>
+        <div class="success" id="sok" style="display:none">Saved ✔</div>
+        <button class="btn" id="saveSettings">💾 Save settings</button>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h2>Backup</h2>
+        <div class="note">Download a backup of your products, settings and orders. Keep one after making changes — you can restore it if the site is ever reset.</div>
+        <button class="btn secondary" id="backupBtn">⬇️ Download backup</button>
+        <label>Restore from a backup file</label>
+        <input type="file" id="restoreFile" accept="application/json" style="padding:8px">
+      </div>
     </div>
   </div>
 </div>
@@ -53,26 +132,35 @@
   const $ = (id) => document.getElementById(id);
   const KEY = 'lmj_admin_key';
   let key = sessionStorage.getItem(KEY) || '';
-  let DATA = null;
-
+  let DATA = null, PRODUCTS = [], SETTINGS = {};
+  const SKEYS = ['businessName', 'tagline', 'ownerPhone', 'callPhone', 'whatsappPhone', 'deliveryFee', 'pickupInfo', 'footerNote'];
   const NEXT = { pending_payment: ['placed', 'cancelled'], placed: ['accepted', 'cancelled'], accepted: ['processing', 'cancelled'], processing: ['ready', 'cancelled'], ready: ['delivered', 'completed'], delivered: ['completed'], completed: [], cancelled: ['placed'] };
   const BTN = { placed: 'Mark placed', accepted: '✔ Accept', processing: '⚙ Processing', ready: '📦 Ready', delivered: '🛵 Delivered', completed: '✅ Close', cancelled: '✕ Cancel' };
 
   async function api(path, opts = {}) {
     const r = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'x-admin-key': key, ...(opts.headers || {}) } });
-    const d = await r.json();
+    const d = await r.json().catch(() => ({}));
     if (r.status === 401) { sessionStorage.removeItem(KEY); key = ''; show(false); throw new Error('Wrong password'); }
     if (!r.ok) throw new Error(d.error || 'Error');
     return d;
   }
   function show(ok) { $('login').style.display = ok ? 'none' : 'block'; $('dash').style.display = ok ? 'block' : 'none'; }
   function normalize(p) { let d = String(p).replace(/\D/g, ''); if (d.startsWith('0') && d.length === 10) d = '233' + d.slice(1); return d; }
+  const esc = (s) => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+  // ---- tabs
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+    ['orders', 'products', 'settings'].forEach(t => $('tab-' + t).style.display = b.dataset.tab === t ? 'block' : 'none');
+    if (b.dataset.tab === 'products') loadProducts();
+    if (b.dataset.tab === 'settings') loadSettings();
+  });
+
+  // ---- orders
   async function load() {
-    try { DATA = await api('/api/admin/orders'); show(true); render(); }
+    try { DATA = await api('/api/admin/orders'); SETTINGS = DATA.settings; show(true); render(); }
     catch (e) { $('err').textContent = e.message; $('err').style.display = 'block'; }
   }
-
   function render() {
     const f = $('filter').value;
     const open = DATA.orders.filter(o => !['completed', 'cancelled'].includes(o.status));
@@ -82,24 +170,22 @@
       <div><b>${open.length}</b><span>Open orders</span></div>
       <div><b>${DATA.orders.filter(o => new Date(o.createdAt).toDateString() === today).length}</b><span>Orders today</span></div>
       <div><b>${DATA.orders.filter(o => o.status === 'completed').length}</b><span>Completed</span></div>
-      <div><b>GHS ${revenue.toFixed(0)}</b><span>Paid via Paystack</span></div>`;
-
+      <div><b>GHS ${revenue.toFixed(0)}</b><span>Paid online</span></div>`;
     const list = f === 'open' ? open : f === 'completed' ? DATA.orders.filter(o => o.status === 'completed') : DATA.orders;
     $('rows').innerHTML = list.length ? list.map(o => {
       const paid = o.payment.status === 'paid';
-      const wa = `https://wa.me/${normalize(o.phone)}?text=${encodeURIComponent(`Hello ${o.name}, this is LMJ about your order ${o.id} (${o.qty} x LMJ Surface Disinfectant, GHS ${o.amount}). `)}`;
+      const items = (o.items || [{ name: 'bottle', qty: o.qty }]).map(i => `${i.qty} × ${esc(i.name)}`).join('<br>');
+      const wa = `https://wa.me/${normalize(o.phone)}?text=${encodeURIComponent(`Hello ${o.name}, this is ${SETTINGS.businessName} about your order ${o.id} (GHS ${o.amount}). `)}`;
       const btns = NEXT[o.status].map(s => `<button class="btn small ${s === 'cancelled' ? 'ghost' : ''}" data-id="${o.id}" data-status="${s}">${BTN[s]}</button>`).join('');
       const markPaid = !paid ? `<button class="btn small ghost" data-id="${o.id}" data-paid="1">💵 Mark paid</button>` : '';
       return `<tr>
         <td><b>${o.id}</b><br><small style="color:var(--muted)">${new Date(o.createdAt).toLocaleString()}</small></td>
-        <td>${o.name}<br><a href="tel:${o.phone}">${o.phone}</a> <a href="${wa}" target="_blank" rel="noopener" title="WhatsApp">💬</a></td>
-        <td class="hide-m">${o.qty} × bottle · <b>GHS ${o.amount}</b><br>${o.fulfilment === 'delivery' ? '🛵 ' + o.address : '🏪 Pickup'}${o.note ? '<br><i>' + o.note + '</i>' : ''}</td>
-        <td><span class="pill ${paid ? 'paid' : 'unpaid'}">${o.payment.status}</span>${o.payment.reference ? '<br><small>' + o.payment.reference + '</small>' : ''}</td>
+        <td>${esc(o.name)}<br><a href="tel:${o.phone}">${o.phone}</a> <a href="${wa}" target="_blank" rel="noopener" title="WhatsApp">💬</a></td>
+        <td class="hide-m">${items}<br><b>GHS ${o.amount}</b><br>${o.fulfilment === 'delivery' ? '🛵 ' + esc(o.address) : '🏪 Pickup'}${o.note ? '<br><i>' + esc(o.note) + '</i>' : ''}</td>
+        <td><span class="pill ${paid ? 'paid' : 'unpaid'}">${o.payment.status}</span></td>
         <td><span class="pill ${o.status}">${DATA.labels[o.status] || o.status}</span></td>
-        <td>${btns}${markPaid}</td>
-      </tr>`;
+        <td>${btns}${markPaid}</td></tr>`;
     }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted)">No orders here yet.</td></tr>';
-
     $('rows').querySelectorAll('button[data-status]').forEach(b => b.onclick = async () => {
       if (b.dataset.status === 'cancelled' && !confirm('Cancel order ' + b.dataset.id + '?')) return;
       b.disabled = true; b.textContent = 'Sending…';
@@ -107,18 +193,89 @@
       catch (e) { alert(e.message); b.disabled = false; }
     });
     $('rows').querySelectorAll('button[data-paid]').forEach(b => b.onclick = async () => {
-      if (!confirm('Mark order ' + b.dataset.id + ' as paid (cash/MoMo received manually)?')) return;
+      if (!confirm('Mark order ' + b.dataset.id + ' as paid (cash/MoMo received)?')) return;
       try { await api(`/api/admin/orders/${b.dataset.id}/mark-paid`, { method: 'POST' }); await load(); } catch (e) { alert(e.message); }
     });
   }
 
+  // ---- products
+  async function loadProducts() {
+    PRODUCTS = await api('/api/admin/products');
+    $('plist').innerHTML = PRODUCTS.length ? PRODUCTS.map(p => `
+      <div class="pcard ${p.active === false ? 'off' : ''}">
+        <img src="${p.image || '/product.jpg'}" alt="">
+        <div><b>${esc(p.name)}</b> ${p.size ? '<small>' + esc(p.size) + '</small>' : ''}<br><span style="color:var(--pink-900);font-weight:800">GHS ${Number(p.price).toFixed(2)}</span> ${p.active === false ? '<span class="pill cancelled">hidden</span>' : ''}</div>
+        <div><button class="btn small ghost" data-edit="${p.id}">✏️ Edit</button><button class="btn small ghost" data-del="${p.id}">🗑</button></div>
+      </div>`).join('') : '<div class="note">No products yet. Tap "Add product".</div>';
+    $('plist').querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openForm(PRODUCTS.find(p => p.id === b.dataset.edit)));
+    $('plist').querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+      const p = PRODUCTS.find(x => x.id === b.dataset.del);
+      if (!confirm(`Delete "${p.name}"? (Tip: you can also just untick "Show on the order page" to hide it.)`)) return;
+      try { await api('/api/admin/products/' + p.id, { method: 'DELETE' }); loadProducts(); } catch (e) { alert(e.message); }
+    });
+  }
+  let pendingImage = null;
+  function openForm(p) {
+    pendingImage = null;
+    $('pformTitle').textContent = p ? 'Edit product' : 'Add product';
+    $('p_id').value = p ? p.id : ''; $('p_name').value = p ? p.name : ''; $('p_price').value = p ? p.price : '';
+    $('p_size').value = p ? (p.size || '') : ''; $('p_desc').value = p ? (p.description || '') : ''; $('p_active').checked = p ? p.active !== false : true;
+    $('p_preview').src = p && p.image ? p.image : ''; $('p_file').value = ''; $('perr').style.display = 'none';
+    $('pform').style.display = 'block'; $('pform').scrollIntoView({ behavior: 'smooth' });
+  }
+  $('newProduct').onclick = () => openForm(null);
+  $('cancelProduct').onclick = () => { $('pform').style.display = 'none'; };
+  $('p_file').onchange = () => {
+    const f = $('p_file').files[0]; if (!f) return;
+    const img = new Image(); const url = URL.createObjectURL(f);
+    img.onload = () => {
+      const max = 900; const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      pendingImage = c.toDataURL('image/jpeg', 0.82); $('p_preview').src = pendingImage; URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  };
+  $('saveProduct').onclick = async () => {
+    const body = { id: $('p_id').value || undefined, name: $('p_name').value, price: $('p_price').value, size: $('p_size').value, description: $('p_desc').value, active: $('p_active').checked };
+    if (pendingImage) body.image = pendingImage;
+    $('saveProduct').disabled = true;
+    try { await api('/api/admin/products', { method: 'POST', body: JSON.stringify(body) }); $('pform').style.display = 'none'; loadProducts(); }
+    catch (e) { $('perr').textContent = e.message; $('perr').style.display = 'block'; }
+    $('saveProduct').disabled = false;
+  };
+
+  // ---- settings
+  async function loadSettings() {
+    SETTINGS = await api('/api/admin/settings');
+    SKEYS.forEach(k => $('s_' + k).value = SETTINGS[k] ?? '');
+  }
+  $('saveSettings').onclick = async () => {
+    const body = {}; SKEYS.forEach(k => body[k] = $('s_' + k).value);
+    $('serr').style.display = 'none'; $('sok').style.display = 'none';
+    try { SETTINGS = await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) }); $('sok').style.display = 'block'; setTimeout(() => $('sok').style.display = 'none', 2500); }
+    catch (e) { $('serr').textContent = e.message; $('serr').style.display = 'block'; }
+  };
+  $('backupBtn').onclick = async () => {
+    const r = await fetch('/api/admin/backup', { headers: { 'x-admin-key': key } });
+    const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'lmj-backup-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
+  };
+  $('restoreFile').onchange = async () => {
+    const f = $('restoreFile').files[0]; if (!f) return;
+    if (!confirm('Restore products, settings and orders from this backup?')) { $('restoreFile').value = ''; return; }
+    try { await api('/api/admin/restore', { method: 'POST', body: await f.text() }); alert('Restored ✔'); loadSettings(); loadProducts(); load(); }
+    catch (e) { alert(e.message); }
+    $('restoreFile').value = '';
+  };
+
+  // ---- auth
   $('loginBtn').onclick = () => { key = $('key').value; sessionStorage.setItem(KEY, key); load(); };
   $('key').onkeydown = (e) => { if (e.key === 'Enter') $('loginBtn').click(); };
   $('refresh').onclick = load;
   $('filter').onchange = render;
   $('logout').onclick = () => { sessionStorage.removeItem(KEY); key = ''; show(false); };
   if (key) load();
-  setInterval(() => { if (key && $('dash').style.display !== 'none') load(); }, 30000);
+  setInterval(() => { if (key && $('dash').style.display !== 'none' && $('tab-orders').style.display !== 'none') load(); }, 30000);
 })();
 </script>
 </body>
