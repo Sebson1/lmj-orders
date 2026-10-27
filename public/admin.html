@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Owner Dashboard</title>
+<title>LMJ Ventures – Owner Dashboard</title>
+<link rel="icon" href="/logo.png">
 <link rel="stylesheet" href="/style.css">
 <style>
   .tabs { display: flex; gap: 6px; margin: 0 0 14px; }
@@ -29,7 +30,7 @@
 </head>
 <body>
 <header class="brand">
-  <div class="logo">✦ LMJ</div>
+  <a class="logo" href="/"><img src="/logo.png" alt="LMJ Ventures"></a>
   <h1>OWNER DASHBOARD</h1>
 </header>
 
@@ -89,6 +90,8 @@
           <div><label>Price (GHS)</label><input id="p_price" type="number" min="0" step="0.5" placeholder="25"></div>
           <div><label>Size / pack (optional)</label><input id="p_size" placeholder="e.g. 100ml"></div>
         </div>
+        <label>Category</label><input id="p_category" list="catlist" placeholder="e.g. Disinfectants, Sanitizers, Cleaning"><datalist id="catlist"></datalist>
+        <div class="note">Products are grouped by category on the order page (customers can filter by it).</div>
         <label>Description</label><textarea id="p_desc" placeholder="What it does, how to use it…"></textarea>
         <label>Photos (up to 5 — the first one is the main photo)</label>
         <div class="thumbs" id="p_thumbs"></div>
@@ -106,7 +109,13 @@
       <div class="card">
         <h2>Business settings</h2>
         <label>Business name</label><input id="s_businessName">
-        <label>Tagline (shown under the name)</label><input id="s_tagline" placeholder="e.g. Kills 99.9% germs">
+        <label>Headline on the order page</label><input id="s_tagline" placeholder="e.g. Clean surfaces, delivered to your door.">
+        <div class="note">Tip: the part after the first comma is shown in orange.</div>
+        <label>Logo</label>
+        <div style="display:flex;gap:12px;align-items:center">
+          <img id="s_logoPreview" src="/logo.png" alt="" style="width:90px;height:90px;object-fit:contain;border:1.5px dashed var(--b-300);border-radius:10px;background:#fff">
+          <div><input type="file" id="s_logoFile" accept="image/*" style="padding:8px"><div class="note">PNG with a transparent background looks best. <a href="#" id="s_logoReset">Use default logo</a></div></div>
+        </div>
         <h3>Phone numbers</h3>
         <label>Owner alert number (receives every order by SMS + WhatsApp)</label><input id="s_ownerPhone" type="tel">
         <label>"Call to order" number shown to customers</label><input id="s_callPhone" type="tel">
@@ -206,8 +215,8 @@
     PRODUCTS = await api('/api/admin/products');
     $('plist').innerHTML = PRODUCTS.length ? PRODUCTS.map(p => `
       <div class="pcard ${p.active === false ? 'off' : ''}">
-        <img src="${p.image || '/product.jpg'}" alt="">
-        <div><b>${esc(p.name)}</b> <small style="color:var(--muted)">${(p.images || []).length} photo${(p.images || []).length === 1 ? '' : 's'}</small> ${p.size ? '<small>' + esc(p.size) + '</small>' : ''}<br><span style="color:var(--pink-900);font-weight:800">GHS ${Number(p.price).toFixed(2)}</span> ${p.active === false ? '<span class="pill cancelled">hidden</span>' : ''}</div>
+        <img src="${p.image || '/logo.png'}" alt="" style="object-fit:contain">
+        <div>${p.category ? '<small style="color:var(--amber-d);font-weight:800;text-transform:uppercase;font-size:11px">' + esc(p.category) + '</small><br>' : ''}<b>${esc(p.name)}</b> <small style="color:var(--muted)">${(p.images || []).length} photo${(p.images || []).length === 1 ? '' : 's'}</small> ${p.size ? '<small>' + esc(p.size) + '</small>' : ''}<br><span style="color:var(--pink-900);font-weight:800">GHS ${Number(p.price).toFixed(2)}</span> ${p.active === false ? '<span class="pill cancelled">hidden</span>' : ''}</div>
         <div><button class="btn small ghost" data-edit="${p.id}">✏️ Edit</button><button class="btn small ghost" data-del="${p.id}">🗑</button></div>
       </div>`).join('') : '<div class="note">No products yet. Tap "Add product".</div>';
     $('plist').querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openForm(PRODUCTS.find(p => p.id === b.dataset.edit)));
@@ -239,7 +248,8 @@
   function openForm(p) {
     $('pformTitle').textContent = p ? 'Edit product' : 'Add product';
     $('p_id').value = p ? p.id : ''; $('p_name').value = p ? p.name : ''; $('p_price').value = p ? p.price : '';
-    $('p_size').value = p ? (p.size || '') : ''; $('p_desc').value = p ? (p.description || '') : ''; $('p_active').checked = p ? p.active !== false : true;
+    $('p_size').value = p ? (p.size || '') : ''; $('p_desc').value = p ? (p.description || '') : ''; $('p_category').value = p ? (p.category || '') : '';
+    $('catlist').innerHTML = [...new Set(PRODUCTS.map(x => x.category).filter(Boolean))].map(c => `<option value="${esc(c)}">`).join(''); $('p_active').checked = p ? p.active !== false : true;
     images = p ? (p.images || []).slice() : []; $('p_file').value = ''; $('perr').style.display = 'none'; renderThumbs();
     $('pform').style.display = 'block'; $('pform').scrollIntoView({ behavior: 'smooth' });
   }
@@ -264,7 +274,7 @@
     $('p_file').value = ''; renderThumbs();
   };
   $('saveProduct').onclick = async () => {
-    const body = { id: $('p_id').value || undefined, name: $('p_name').value, price: $('p_price').value, size: $('p_size').value, description: $('p_desc').value, active: $('p_active').checked, images };
+    const body = { id: $('p_id').value || undefined, name: $('p_name').value, price: $('p_price').value, size: $('p_size').value, category: $('p_category').value, description: $('p_desc').value, active: $('p_active').checked, images };
     $('saveProduct').disabled = true;
     try { await api('/api/admin/products', { method: 'POST', body: JSON.stringify(body) }); $('pform').style.display = 'none'; loadProducts(); }
     catch (e) { $('perr').textContent = e.message; $('perr').style.display = 'block'; }
@@ -272,14 +282,23 @@
   };
 
   // ---- settings
+  let pendingLogo = undefined; // undefined = unchanged, '' = reset to default, 'data:..' = new
   async function loadSettings() {
     SETTINGS = await api('/api/admin/settings');
     SKEYS.forEach(k => $('s_' + k).value = SETTINGS[k] ?? '');
+    $('s_logoPreview').src = SETTINGS.logo || '/logo.svg'; pendingLogo = undefined; $('s_logoFile').value = '';
   }
+  $('s_logoFile').onchange = async () => {
+    const f = $('s_logoFile').files[0]; if (!f) return;
+    const d = await new Promise(resolve => { const img = new Image(); const url = URL.createObjectURL(f); img.onload = () => { const max = 600; const sc = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); resolve(c.toDataURL('image/png')); }; img.onerror = () => resolve(null); img.src = url; });
+    if (d) { pendingLogo = d; $('s_logoPreview').src = d; }
+  };
+  $('s_logoReset').onclick = (e) => { e.preventDefault(); pendingLogo = ''; $('s_logoPreview').src = '/logo.svg'; };
   $('saveSettings').onclick = async () => {
     const body = {}; SKEYS.forEach(k => body[k] = $('s_' + k).value);
+    if (pendingLogo !== undefined) body.logo = pendingLogo;
     $('serr').style.display = 'none'; $('sok').style.display = 'none';
-    try { SETTINGS = await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) }); $('sok').style.display = 'block'; setTimeout(() => $('sok').style.display = 'none', 2500); }
+    try { SETTINGS = await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) }); pendingLogo = undefined; $('s_logoPreview').src = SETTINGS.logo || '/logo.svg'; document.querySelector('header.brand img').src = (SETTINGS.logo || '/logo.svg'); $('sok').style.display = 'block'; setTimeout(() => $('sok').style.display = 'none', 2500); }
     catch (e) { $('serr').textContent = e.message; $('serr').style.display = 'block'; }
   };
   $('backupBtn').onclick = async () => {

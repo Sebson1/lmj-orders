@@ -3,49 +3,70 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LMJ – Order Online</title>
-<meta name="description" content="LMJ Surface Disinfectant (Pink Blossom, 100ml) kills 99.9% of germs. Order online, pay with Paystack, get it by pickup or delivery.">
-<meta property="og:title" content="LMJ Surface Disinfectant – Pink Blossom">
-<meta property="og:description" content="Kills 99.9% germs. Order online now – pickup or delivery.">
+<title>LMJ Ventures – Order Online</title>
+<meta name="description" content="LMJ Ventures: surface disinfectants and cleaning products. Order online, pay with Paystack, pickup or delivery.">
+<meta property="og:title" content="LMJ Ventures – Order Online">
+<meta property="og:description" content="Clean surfaces, delivered to your door. Order online now – pickup or delivery.">
 <meta property="og:image" content="/product.jpg">
 <meta property="og:type" content="website">
+<link rel="icon" href="/logo.png">
 <link rel="stylesheet" href="/style.css">
 <style>
-  .product { display: grid; grid-template-columns: 96px 1fr; gap: 14px; align-items: center; padding: 12px; border: 1.5px solid var(--pink-100); border-radius: 14px; background: var(--white); margin-bottom: 10px; }
-  .product img.main { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; background: var(--pink-50); cursor: zoom-in; }
+  .product { display: grid; grid-template-columns: 96px 1fr; gap: 14px; align-items: center; padding: 12px; border: 1.5px solid var(--b-100); border-radius: 14px; background: var(--white); margin-bottom: 10px; }
+  .product .main.ph { width: 96px; height: 96px; border-radius: 10px; background: linear-gradient(135deg, var(--b-100), #fff3d9); display: grid; place-items: center; font-size: 44px; }
+  .product img.main { width: 96px; height: 96px; object-fit: cover; border-radius: 10px; background: var(--b-50); cursor: zoom-in; }
   .product .strip { display: flex; gap: 4px; margin-top: 4px; }
   .product .strip img { width: 28px; height: 28px; object-fit: cover; border-radius: 6px; border: 1.5px solid transparent; cursor: pointer; }
-  .product .strip img.on { border-color: var(--pink-900); }
-  .lightbox { position: fixed; inset: 0; background: rgba(58,31,43,.92); display: none; align-items: center; justify-content: center; z-index: 50; flex-direction: column; gap: 10px; }
+  .product .strip img.on { border-color: var(--b-900); }
+  .lightbox { position: fixed; inset: 0; background: rgba(11,42,111,.92); display: none; align-items: center; justify-content: center; z-index: 50; flex-direction: column; gap: 10px; }
   .lightbox.open { display: flex; }
   .lightbox img.big { max-width: 94vw; max-height: 78vh; border-radius: 12px; }
   .lightbox .dots { display: flex; gap: 8px; }
   .lightbox .dots img { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; border: 2px solid transparent; cursor: pointer; }
   .lightbox .dots img.on { border-color: #fff; }
   .lightbox .close { position: absolute; top: 14px; right: 18px; color: #fff; font-size: 30px; cursor: pointer; }
-  .product .name { font-weight: 800; color: var(--pink-900); }
+  .product .cat { font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--amber-d); }
+  .product .name { font-weight: 800; color: var(--b-900); }
   .product .desc { font-size: 13px; color: var(--muted); margin: 2px 0 6px; }
   .product .bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .product .p { font-weight: 900; font-size: 18px; color: var(--pink-900); }
+  .product .p { font-weight: 900; font-size: 18px; color: var(--b-900); }
   .product .qty button { width: 36px; height: 36px; font-size: 18px; }
   .product .qty input { width: 48px; height: 36px; padding: 0; font-size: 15px; }
-  .product.selected { border-color: var(--pink-500); background: var(--pink-50); }
-  .hero.single img { max-height: 70vh; object-fit: contain; }
+  .product.selected { border-color: var(--amber); background: #fff5ec; }
+  .hero-card { display: grid; grid-template-columns: 170px 1fr; gap: 18px; align-items: center; background: linear-gradient(135deg, #ffffff, #eef3fc 60%, #fff0e2); border: 1px solid var(--b-100); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; }
+  .hero-logo { width: 170px; height: 170px; object-fit: contain; box-shadow: none !important; }
+  @media (max-width: 520px) { .hero-card { grid-template-columns: 1fr; text-align: center; } .hero-logo { margin: 0 auto; width: 140px; height: 140px; } .features { text-align: left; } }
+  .summary { font-size: 14px; }
+  .summary div { display: flex; justify-content: space-between; padding: 3px 0; }
+  .sticky { position: sticky; top: 12px; }
+  @media (max-width: 760px) { .sticky { position: static; } }
 </style>
 </head>
 <body>
-<header class="brand">
-  <div class="logo" id="bizName">✦ LMJ</div>
-  <div class="tag" id="tagline">ORDER ONLINE</div>
-</header>
 
-<div class="wrap">
+<div class="wrap" style="padding-top:22px">
   <div class="grid">
-    <section class="hero" id="hero"><img src="/product.jpg" alt="Product"></section>
+    <section>
+      <section class="hero" id="hero" style="margin-bottom:16px">
+        <div class="hero-card" id="heroCard">
+          <img src="/logo.png" alt="LMJ Ventures" class="hero-logo" id="heroLogo">
+          <div>
+            <h2 id="headline" style="margin:0 0 6px;font-size:26px;line-height:1.15">Clean surfaces, <span style="color:var(--amber-d)">delivered to your door.</span></h2>
+            <div class="features" id="heroFeatures" style="margin:10px 0 0"></div>
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <h2 style="margin-top:0">Choose your products</h2>
+        <input class="search" id="q" placeholder="🔍 Search products…" aria-label="Search products">
+        <div class="cats" id="cats"></div>
+        <div id="products"></div>
+      </section>
+    </section>
 
-    <section class="card">
-      <h2 style="margin-top:0">Choose your products</h2>
-      <div id="products"></div>
+    <section class="card sticky">
+      <h2 style="margin-top:0">Your order</h2>
+      <div class="summary" id="summary"><div class="note">No items yet. Add products on the left.</div></div>
 
       <form id="orderForm" autocomplete="on">
         <label for="name">Your name</label>
@@ -92,51 +113,82 @@
 <script>
 (async function () {
   const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const cfg = await fetch('/api/config').then(r => r.json());
   const P = cfg.products;
   document.title = cfg.businessName + ' – Order Online';
-  $('bizName').textContent = '✦ ' + cfg.businessName;
-  $('tagline').textContent = (cfg.tagline || 'Order online').toUpperCase();
   $('footer').textContent = cfg.footerNote || '';
+  $('heroLogo').src = cfg.logo || '/logo.png'; $('heroLogo').alt = cfg.businessName;
+  if (cfg.tagline) {
+    const parts = cfg.tagline.split(',');
+    $('headline').innerHTML = parts.length > 1 ? esc(parts[0]) + ', <span style="color:var(--amber-d)">' + esc(parts.slice(1).join(',').trim()) + '</span>' : esc(cfg.tagline);
+  }
   $('callBtn').href = 'tel:' + cfg.callPhone; $('callBtn').textContent = '📞 Call to order: ' + cfg.callPhone;
   if (cfg.pickupInfo) { $('pickupInfo').textContent = '🏪 ' + cfg.pickupInfo; $('pickupInfo').style.display = 'block'; }
   if (!cfg.paystack) { $('submitBtn').textContent = '🛒 Place order'; $('payNote').textContent = 'Pay on pickup or delivery.'; }
 
-  // hero: first product image
-  if (P[0] && P[0].image) { $('hero').querySelector('img').src = P[0].image; if (P.length === 1) $('hero').classList.add('single'); }
+  const CATS = [...new Set(P.map(p => p.category || 'General'))];
+  const ICON = { 'Disinfectants': '🧴', 'Cleaning': '🧼', 'Sanitizers': '🧴', 'Household': '🏠', 'General': '🛍️' };
+  const icon = c => ICON[c] || '🛍️';
+  $('heroFeatures').innerHTML = (CATS.length > 1 ? CATS : ['Kills 99.9% germs', 'Pickup or delivery', 'Pay online or on delivery', 'SMS & WhatsApp updates']).slice(0, 4)
+    .map(c => `<div>${CATS.length > 1 ? icon(c) + ' ' : '✔️ '}${esc(c)}</div>`).join('');
 
-  const qtys = {};
-  P.forEach((p, i) => { qtys[p.id] = (P.length === 1 && i === 0) ? 1 : 0; });
-  $('products').innerHTML = P.length ? P.map(p => `
-    <div class="product" id="prod-${p.id}">
+  let cat = 'All', q = '';
+  const qtys = {}; P.forEach(p => qtys[p.id] = 0);
+  const hasPhoto = p => !!((p.images && p.images[0]) || p.image);
+  const imgOf = p => (p.images && p.images[0]) || p.image || '/logo.png';
+  const tile = p => hasPhoto(p)
+    ? `<img class="main" src="${imgOf(p)}" alt="${esc(p.name)}" data-lb="${p.id}" data-i="0">`
+    : `<div class="main ph" aria-hidden="true">${icon(p.category)}</div>`;
+
+  function renderCats() {
+    $('cats').style.display = CATS.length > 1 ? 'flex' : 'none';
+    $('cats').innerHTML = ['All', ...CATS].map(c => `<button type="button" class="${c === cat ? 'on' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
+  }
+  function renderProducts() {
+    const list = P.filter(p => (cat === 'All' || (p.category || 'General') === cat) && (!q || (p.name + ' ' + (p.description || '') + ' ' + (p.category || '')).toLowerCase().includes(q)));
+    $('products').innerHTML = list.length ? list.map(p => `
+    <div class="product ${qtys[p.id] > 0 ? 'selected' : ''}" id="prod-${p.id}">
       <div>
-        <img class="main" src="${(p.images && p.images[0]) || p.image || '/product.jpg'}" alt="${p.name}" data-lb="${p.id}" data-i="0">
+        ${tile(p)}
         ${p.images && p.images.length > 1 ? '<div class="strip">' + p.images.map((u, i) => `<img src="${u}" class="${i === 0 ? 'on' : ''}" data-sw="${p.id}" data-i="${i}" alt="">`).join('') + '</div>' : ''}
       </div>
       <div>
-        <div class="name">${p.name}${p.size ? ' <small style="font-weight:600;color:var(--muted)">' + p.size + '</small>' : ''}</div>
-        <div class="desc">${p.description || ''}</div>
+        ${CATS.length > 1 || p.category ? `<div class="cat">${esc(p.category || 'General')}</div>` : ''}
+        <div class="name">${esc(p.name)}${p.size ? ' <small style="font-weight:600;color:var(--muted)">' + esc(p.size) + '</small>' : ''}</div>
+        <div class="desc">${esc(p.description || '')}</div>
         <div class="bottom">
           <span class="p">GHS ${Number(p.price).toFixed(2)}</span>
           <span class="qty"><button type="button" data-id="${p.id}" data-d="-1">−</button><input type="number" min="0" max="500" value="${qtys[p.id]}" data-id="${p.id}"><button type="button" data-id="${p.id}" data-d="1">+</button></span>
         </div>
       </div>
-    </div>`).join('') : '<div class="note">No products available right now. Please check back soon.</div>';
-
+    </div>`).join('') : '<div class="note">No products match. Try another category or search.</div>';
+  }
   const fulfil = () => document.querySelector('input[name=fulfilment]:checked').value;
   function recalc() {
-    let sub = 0;
-    P.forEach(p => { sub += qtys[p.id] * Number(p.price); $('prod-' + p.id).classList.toggle('selected', qtys[p.id] > 0); });
+    let sub = 0; const rows = [];
+    P.forEach(p => { if (qtys[p.id] > 0) { sub += qtys[p.id] * Number(p.price); rows.push(`<div><span>${qtys[p.id]} × ${esc(p.name)}</span><b>GHS ${(qtys[p.id] * p.price).toFixed(2)}</b></div>`); }
+      const el = $('prod-' + p.id); if (el) el.classList.toggle('selected', qtys[p.id] > 0); });
     const del = fulfil() === 'delivery' ? cfg.deliveryFee : 0;
-    $('total').textContent = 'GHS ' + (sub + del).toFixed(2) + (del ? ` (incl. GHS ${del} delivery)` : '');
+    if (del && rows.length) rows.push(`<div><span>Delivery</span><b>GHS ${del.toFixed(2)}</b></div>`);
+    $('summary').innerHTML = rows.length ? rows.join('') : '<div class="note">No items yet. Add products on the left.</div>';
+    $('total').textContent = 'GHS ' + (sub + (rows.length ? del : 0)).toFixed(2);
   }
+  renderCats(); renderProducts(); recalc();
+
+  $('cats').addEventListener('click', e => { const b = e.target.closest('button[data-cat]'); if (!b) return; cat = b.dataset.cat; renderCats(); renderProducts(); });
+  $('q').addEventListener('input', () => { q = $('q').value.trim().toLowerCase(); renderProducts(); });
   $('products').addEventListener('click', e => {
     const b = e.target.closest('button[data-id]'); if (!b) return;
     const id = b.dataset.id; qtys[id] = Math.max(0, Math.min(500, qtys[id] + Number(b.dataset.d)));
     document.querySelector(`input[data-id="${id}"]`).value = qtys[id]; recalc();
   });
-  // photo gallery: thumbnails swap the main image; tapping the main image opens a full-screen viewer
-  const imgsOf = (id) => { const p = P.find(x => x.id === id); return (p.images && p.images.length ? p.images : [p.image || '/product.jpg']); };
+  $('products').addEventListener('input', e => {
+    const i = e.target.closest('input[data-id]'); if (!i) return;
+    qtys[i.dataset.id] = Math.max(0, Math.min(500, parseInt(i.value, 10) || 0)); recalc();
+  });
+  // gallery
+  const imgsOf = (id) => { const p = P.find(x => x.id === id); return (p.images && p.images.length ? p.images : [imgOf(p)]); };
   let lbId = null;
   function showLb(id, i) {
     lbId = id; const list = imgsOf(id);
@@ -154,12 +206,7 @@
   $('lbClose').onclick = () => $('lb').classList.remove('open');
   $('lb').addEventListener('click', e => { if (e.target === $('lb')) $('lb').classList.remove('open'); });
 
-  $('products').addEventListener('input', e => {
-    const i = e.target.closest('input[data-id]'); if (!i) return;
-    qtys[i.dataset.id] = Math.max(0, Math.min(500, parseInt(i.value, 10) || 0)); recalc();
-  });
-  document.querySelectorAll('input[name=fulfilment]').forEach(r => r.onchange = () => { $('addressWrap').style.display = fulfil() === 'delivery' ? 'block' : 'none'; recalc(); });
-  recalc();
+  document.querySelectorAll('input[name=fulfilment]').forEach(r => r.onchange = () => { const d = fulfil() === 'delivery'; $('addressWrap').style.display = d ? 'block' : 'none'; $('pickupInfo').style.display = (!d && cfg.pickupInfo) ? 'block' : 'none'; recalc(); });
 
   $('orderForm').onsubmit = async (e) => {
     e.preventDefault();
@@ -172,6 +219,7 @@
       const r = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Something went wrong');
+      try { localStorage.setItem('lmj_phone', $('phone').value); } catch {}
       location.href = data.paymentUrl || data.trackUrl || ('/track?id=' + data.orderId);
     } catch (ex) { err.textContent = ex.message; err.style.display = 'block'; btn.disabled = false; btn.textContent = label; }
   };

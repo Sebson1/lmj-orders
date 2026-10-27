@@ -30,17 +30,18 @@ const FILES = {
 
 // Defaults used the first time (and as fallback). The owner edits these from /admin → Settings.
 const DEFAULT_SETTINGS = {
-  businessName: process.env.BUSINESS_NAME || 'LMJ',
-  tagline: 'Kills 99.9% germs',
+  businessName: process.env.BUSINESS_NAME || 'LMJ Ventures',
+  tagline: 'Clean surfaces, delivered to your door.',
+  logo: '',                                                // data URL uploaded from /admin → Settings (blank = default /logo.svg)
   ownerPhone: process.env.OWNER_PHONE || '0558527351',      // receives order alerts (SMS + WhatsApp)
   callPhone: process.env.CONTACT_PHONE || '0535623533',    // "Call to order" button
   whatsappPhone: process.env.CONTACT_PHONE || '0535623533',// "Chat on WhatsApp" button
   deliveryFee: Number(process.env.DELIVERY_FEE || 0),
   pickupInfo: '',                                          // e.g. "Pickup at Madina, near the market, 8am–6pm"
-  footerNote: 'Keep out of reach of children. Use as directed.',
+  footerNote: 'Genuine products. Keep out of reach of children. Thank you for shopping with LMJ Ventures.',
 };
 const DEFAULT_PRODUCTS = [{
-  id: 'lmj-pink-blossom', name: 'LMJ Surface Disinfectant – Pink Blossom', size: '100ml',
+  id: 'lmj-pink-blossom', name: 'LMJ Surface Disinfectant – Pink Blossom', size: '100ml', category: 'Disinfectants',
   price: Number(process.env.PRODUCT_PRICE || 25), description: 'Kills 99.9% germs. Spray evenly on the surface and allow to air-dry for 30 seconds. Perfect for chairs, handles, toilet seats, tables & more.',
   images: ['/product.jpg'], active: true, sort: 1,
 }];
@@ -89,6 +90,13 @@ async function initStore() {
     MEM.products = readJson(FILES.products, null);
     for (const o of readJson(FILES.orders, [])) MEM.orders.set(o.id, o);
     log('[store] using local JSON files in ./data (set SUPABASE_URL + SUPABASE_SERVICE_KEY for permanent storage)');
+  }
+  // one-time rebrand: LMJ → LMJ Ventures (owner can still rename in Settings afterwards)
+  if (MEM.settings && MEM.settings.businessName === 'LMJ') {
+    MEM.settings.businessName = 'LMJ Ventures';
+    if (!MEM.settings.tagline || MEM.settings.tagline === 'Kills 99.9% germs') MEM.settings.tagline = DEFAULT_SETTINGS.tagline;
+    if (!MEM.settings.footerNote || MEM.settings.footerNote === 'Keep out of reach of children. Use as directed.') MEM.settings.footerNote = DEFAULT_SETTINGS.footerNote;
+    await persist('settings', MEM.settings); log('[store] renamed business to LMJ Ventures');
   }
 }
 
@@ -246,7 +254,7 @@ function productImages(p) { return Array.isArray(p.images) ? p.images : (p.image
 function publicProduct(p) {
   const imgs = productImages(p).map((src, i) => src.startsWith('data:') ? `/img/${p.id}/${i}?v=${(p.imgVersion || 0)}` : src);
   const { image, images, ...rest } = p;
-  return { ...rest, images: imgs, image: imgs[0] || '/product.jpg' };
+  return { ...rest, images: imgs, image: imgs[0] || '' };
 }
 function serveProductImage(res, pid, idx) {
   const p = loadProducts().find(x => x.id === pid);
@@ -265,6 +273,7 @@ function publicConfig() {
   return {
     businessName: S.businessName, tagline: S.tagline, deliveryFee: Number(S.deliveryFee) || 0, pickupInfo: S.pickupInfo, footerNote: S.footerNote,
     callPhone: S.callPhone, whatsappPhone: normalizePhone(S.whatsappPhone || S.callPhone), paystack: !!ENV.paystackSecret,
+    logo: S.logo ? `/logo.png?v=${S.logoVersion || 1}` : '/logo.svg',
     products: loadProducts().filter(p => p.active !== false).sort((a, b) => (a.sort || 0) - (b.sort || 0)).map(publicProduct),
   };
 }
@@ -382,14 +391,18 @@ async function handleApi(req, res, url) {
     }
 
     // Settings
-    if (req.method === 'GET' && p === '/api/admin/settings') return json(res, 200, loadSettings());
+    if (req.method === 'GET' && p === '/api/admin/settings') { const S = loadSettings(); return json(res, 200, { ...S, logo: S.logo ? `/logo.png?v=${S.logoVersion}` : '' }); }
     if (req.method === 'PUT' && p === '/api/admin/settings') {
       const b = await readJsonBody(req); if (!b) return json(res, 400, { error: 'Invalid request' });
       const S = loadSettings();
-      for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b) S[k] = k === 'deliveryFee' ? Math.max(0, Number(b[k]) || 0) : String(b[k]).trim().slice(0, 300);
+      for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in b && k !== 'logo') S[k] = k === 'deliveryFee' ? Math.max(0, Number(b[k]) || 0) : String(b[k]).trim().slice(0, 300);
+      if (typeof b.logo === 'string' && (b.logo === '' || b.logo.startsWith('data:image/'))) {
+        if (b.logo.length > 600 * 1024) return json(res, 400, { error: 'Logo image is too large. Please use a smaller file.' });
+        S.logo = b.logo; S.logoVersion = (S.logoVersion || 0) + 1;
+      }
       if (normalizePhone(S.ownerPhone).length < 12) return json(res, 400, { error: 'Owner alert number is not a valid Ghana number.' });
       await saveSettings(S);
-      return json(res, 200, S);
+      return json(res, 200, { ...S, logo: S.logo ? `/logo.png?v=${S.logoVersion}` : '' });
     }
 
     // Products
@@ -409,6 +422,7 @@ async function handleApi(req, res, url) {
       }
       Object.assign(prod, {
         name, price, size: String(b.size || '').trim().slice(0, 40), description: String(b.description || '').trim().slice(0, 600),
+        category: String(b.category || '').trim().slice(0, 40),
         active: b.active !== false && b.active !== 'false',
         sort: Number(b.sort) || prod.sort,
       });
@@ -473,6 +487,14 @@ const server = http.createServer(async (req, res) => {
       }
       const orderId = ref ? ref.split('-').slice(0, 2).join('-') : '';
       return redirect(res, `/track?id=${orderId}&paid=0`);
+    }
+    if (url.pathname === '/logo.png') {
+      const S = loadSettings();
+      const m = S.logo && S.logo.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+      if (!m) return serveStatic(res, 'logo.svg');
+      const buf = Buffer.from(m[2], 'base64');
+      res.writeHead(200, { 'Content-Type': m[1], 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400' });
+      return res.end(buf);
     }
     const mImg = url.pathname.match(/^\/img\/([a-z0-9-]+)\/(\d+)$/);
     if (mImg) return serveProductImage(res, mImg[1], +mImg[2]);

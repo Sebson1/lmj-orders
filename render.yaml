@@ -16,13 +16,13 @@ services:
       - key: CONTACT_PHONE
         value: "0535623533"
       - key: BUSINESS_NAME
-        value: LMJ
+        value: LMJ Ventures
       - key: PRODUCT_PRICE
         value: "25"
       - key: DELIVERY_FEE
         value: "0"
       - key: MNOTIFY_SENDER_ID
-        value: LMJ
+        value: LMJ Ventures
       - key: ADMIN_KEY
         generateValue: true
       - key: MNOTIFY_API_KEY

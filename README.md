@@ -1,6 +1,6 @@
-# LMJ Surface Disinfectant – Online Order Site
+# LMJ Ventures – Online Order Site
 
-A small website where customers order **LMJ Surface Disinfectant (Pink Blossom)**, pay online with **Paystack**, and get **SMS (mNotify) + WhatsApp** updates at every step. The owner gets every order by SMS/WhatsApp and manages it from a dashboard.
+A small website where customers order **LMJ Ventures** products (surface disinfectants and more), pay online with **Paystack**, and get **SMS (mNotify) + WhatsApp** updates at every step. The owner gets every order by SMS/WhatsApp and manages it from a dashboard.
 
 Share the site link on Facebook, Instagram, TikTok, WhatsApp status etc. — the page already carries a preview image and description for social media.
 
@@ -10,7 +10,7 @@ Share the site link on Facebook, Instagram, TikTok, WhatsApp status etc. — the
 |---|---|---|
 | `/` | Customers | Product page + order form → Paystack payment |
 | `/track?id=…` | Customers | Live order progress; **"I have received my order"** button closes the order |
-| `/admin` | Owner | Password-protected dashboard with three tabs: **Orders** (accept → processing → ready → delivered, mark paid, WhatsApp the customer), **Products** (add/edit/hide products with photo, price, size, description), **Settings** (business name, tagline, owner alert number, call number, WhatsApp number, delivery fee, pickup info) plus backup/restore |
+| `/admin` | Owner | Password-protected dashboard with three tabs: **Orders** (accept → processing → ready → delivered, mark paid, WhatsApp the customer), **Products** (add/edit/hide products with photo, price, size, description), **Settings** (business name, headline, logo, owner alert number, call number, WhatsApp number, delivery fee, pickup info) plus backup/restore |
 
 ## Order flow & messages
 
