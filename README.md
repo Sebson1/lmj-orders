@@ -10,7 +10,8 @@ Share the site link on Facebook, Instagram, TikTok, WhatsApp status etc. — the
 |---|---|---|
 | `/` | Customers | Product page + order form → Paystack payment |
 | `/track?id=…` | Customers | Live order progress; **"I have received my order"** button closes the order |
-| `/admin` | Owner | Password-protected dashboard with three tabs: **Orders** (accept → processing → ready → delivered, mark paid, WhatsApp the customer), **Products** (add/edit/hide products with photo, price, size, description), **Settings** (business name, headline, logo, owner alert number, call number, WhatsApp number, delivery fee, pickup info) plus backup/restore |
+| `/invoice/<order>?t=…` · `/receipt/<order>?t=…` | Customers | Printable invoice (created for every order) and receipt (issued automatically when the invoice is paid); links are sent by SMS/WhatsApp and shown on the tracking page |
+| `/admin` | Owner | Password-protected dashboard with three tabs: **Orders** (accept → processing → ready → delivered, mark paid, WhatsApp the customer), **Invoices** (every invoice with paid/unpaid status, record a cash/MoMo payment to issue the receipt, resend links), **Products** (add/edit/hide products with photo, price, size, description), **Settings** (business name, headline, logo, owner alert number, call number, WhatsApp number, delivery fee, pickup info) plus backup/restore |
 
 ## Order flow & messages
 

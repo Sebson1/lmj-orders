@@ -39,6 +39,10 @@ const DEFAULT_SETTINGS = {
   deliveryFee: Number(process.env.DELIVERY_FEE || 0),
   pickupInfo: '',                                          // e.g. "Pickup at Madina, near the market, 8am–6pm"
   footerNote: 'Genuine products. Keep out of reach of children. Thank you for shopping with LMJ Ventures.',
+  businessAddress: '',                                     // printed on invoices & receipts
+  businessEmail: '',
+  businessTin: '',                                         // optional tax ID
+  invoiceNote: 'Thank you for your business.',             // printed at the bottom of invoices/receipts
 };
 const DEFAULT_PRODUCTS = [{
   id: 'lmj-pink-blossom', name: 'LMJ Surface Disinfectant – Pink Blossom', size: '100ml', category: 'Disinfectants',
@@ -91,6 +95,12 @@ async function initStore() {
     for (const o of readJson(FILES.orders, [])) MEM.orders.set(o.id, o);
     log('[store] using local JSON files in ./data (set SUPABASE_URL + SUPABASE_SERVICE_KEY for permanent storage)');
   }
+  // number any existing orders that pre-date the invoice system (oldest first, so numbers follow order date)
+  rebuildCounters();
+  for (const o of [...MEM.orders.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    let changed = ensureInvoice(o); changed = ensureReceipt(o) || changed;
+    if (changed) await saveOrder(o);
+  }
   // one-time rebrand: LMJ → LMJ Ventures (owner can still rename in Settings afterwards)
   if (MEM.settings && MEM.settings.businessName === 'LMJ') {
     MEM.settings.businessName = 'LMJ Ventures';
@@ -106,6 +116,42 @@ const loadSettings = () => ({ ...DEFAULT_SETTINGS, ...(MEM.settings || {}) });
 async function saveProducts(p) { MEM.products = p; await persist('products', p); }
 async function saveSettings(s) { MEM.settings = s; await persist('settings', s); }
 async function saveOrder(o) { MEM.orders.set(o.id, o); await persist('order:' + o.id, o); }
+
+// ---------- invoices & receipts ----------
+// Every order gets an invoice (INV-YYYY-0001). When the invoice is paid, a receipt (RCT-YYYY-0001) is issued.
+// Documents are viewed at /invoice/<orderId>?t=<token> and /receipt/<orderId>?t=<token>; the token is a
+// per-order secret so the links in SMS/WhatsApp open without typing the phone number.
+MEM.counters = null;
+function nextNumber(kind) {
+  const year = new Date().getFullYear();
+  const c = MEM.counters || (MEM.counters = {});
+  const key = `${kind}:${year}`;
+  c[key] = (c[key] || 0) + 1;
+  return `${kind === 'invoice' ? 'INV' : 'RCT'}-${year}-${String(c[key]).padStart(4, '0')}`;
+}
+function rebuildCounters() {
+  const c = {};
+  for (const o of MEM.orders.values()) {
+    for (const [kind, no] of [['invoice', o.invoice && o.invoice.number], ['receipt', o.receipt && o.receipt.number]]) {
+      const m = no && no.match(/-(\d{4})-(\d+)$/); if (!m) continue;
+      const key = `${kind}:${m[1]}`; c[key] = Math.max(c[key] || 0, +m[2]);
+    }
+  }
+  MEM.counters = c;
+}
+function ensureInvoice(o) {
+  if (o.invoice) return false;
+  o.token = o.token || crypto.randomBytes(8).toString('hex');
+  o.invoice = { number: nextNumber('invoice'), issuedAt: o.createdAt || new Date().toISOString() };
+  return true;
+}
+function ensureReceipt(o) {
+  if (o.receipt || !o.payment || o.payment.status !== 'paid') return false;
+  ensureInvoice(o);
+  o.receipt = { number: nextNumber('receipt'), issuedAt: o.payment.paidAt || new Date().toISOString(), method: o.payment.channel || o.payment.method || 'paystack', reference: o.payment.reference || '' };
+  return true;
+}
+function docLink(o, kind) { return `${ENV.baseUrl}/${kind}/${o.id}?t=${o.token}`; }
 
 function findOrder(id) { return MEM.orders.get(id) || null; }
 async function updateOrder(id, fn) {
@@ -191,7 +237,10 @@ const STATUS_LABEL = {
 function clientMessage(o, status, S) {
   const t = trackLink(o); const B = S.businessName;
   switch (status) {
-    case 'placed': return `Hi ${o.name}, your ${B} order ${o.id} has been received. ${orderSummary(o)} Payment: ${o.payment.status}. Track it here: ${t}`;
+    case 'placed': return o.receipt
+      ? `Hi ${o.name}, your ${B} order ${o.id} has been received and PAID. ${orderSummary(o)} Receipt ${o.receipt.number}: ${docLink(o, 'receipt')} Track: ${t}`
+      : `Hi ${o.name}, your ${B} order ${o.id} has been received. ${orderSummary(o)} Invoice ${o.invoice.number} (${o.payment.status}): ${docLink(o, 'invoice')} Track: ${t}`;
+    case 'receipt': return `${B}: payment received for order ${o.id}. Your receipt ${o.receipt.number}: ${docLink(o, 'receipt')}`;
     case 'accepted': return `Good news ${o.name}! ${B} has ACCEPTED your order ${o.id}. We'll update you as it progresses. ${t}`;
     case 'processing': return `${B}: your order ${o.id} is now being PROCESSED. ${t}`;
     case 'ready': return o.fulfilment === 'delivery'
@@ -205,7 +254,7 @@ function clientMessage(o, status, S) {
 }
 function ownerMessage(o, status) {
   if (status === 'placed')
-    return `NEW ORDER ${o.id}\n${o.name} (${o.phone})\n${orderSummary(o)}\nPayment: ${o.payment.status}${o.note ? '\nNote: ' + o.note : ''}\nManage: ${ENV.baseUrl}/admin`;
+    return `NEW ORDER ${o.id} (${o.invoice.number})\n${o.name} (${o.phone})\n${orderSummary(o)}\nPayment: ${o.payment.status}${o.note ? '\nNote: ' + o.note : ''}\nManage: ${ENV.baseUrl}/admin`;
   if (status === 'completed') return `Order ${o.id} CLOSED – ${o.name} confirmed receipt of ${itemsText(o)}.`;
   return `Order ${o.id} → ${STATUS_LABEL[status] || status}`;
 }
@@ -242,7 +291,7 @@ async function markPaid(orderId, reference, channel) {
   const o = findOrder(orderId);
   if (!o) return null;
   if (o.payment.status === 'paid') return o;
-  await updateOrder(orderId, (x) => { x.payment = { ...x.payment, status: 'paid', reference, channel, paidAt: new Date().toISOString() }; });
+  await updateOrder(orderId, (x) => { x.payment = { ...x.payment, status: 'paid', reference, channel, paidAt: new Date().toISOString() }; ensureReceipt(x); });
   return setStatus(orderId, 'placed', { reference });
 }
 
@@ -312,6 +361,7 @@ async function handleApi(req, res, url) {
       fulfilment, address, note: String(b.note || '').trim().slice(0, 300), subtotal, deliveryFee, amount,
       status: 'pending_payment', payment: { status: 'unpaid', method: 'paystack' }, timeline: [{ status: 'pending_payment', at: now }], createdAt: now, updatedAt: now,
     };
+    ensureInvoice(order);
     await saveOrder(order);
 
     if (ENV.paystackSecret) {
@@ -337,7 +387,22 @@ async function handleApi(req, res, url) {
     const ph = url.searchParams.get('phone');
     if (ph && normalizePhone(ph) !== normalizePhone(o.phone)) return json(res, 403, { error: 'Phone number does not match this order.' });
     const S = loadSettings();
-    return json(res, 200, { ...o, statusLabel: STATUS_LABEL[o.status], ownerWhatsApp: normalizePhone(S.whatsappPhone || S.callPhone), ownerPhone: S.callPhone, businessName: S.businessName });
+    const { token, ...safe } = o;
+    const docs = ph ? { invoiceUrl: o.invoice ? `/invoice/${o.id}?t=${o.token}` : null, receiptUrl: o.receipt ? `/receipt/${o.id}?t=${o.token}` : null } : {};
+    return json(res, 200, { ...safe, ...docs, statusLabel: STATUS_LABEL[o.status], ownerWhatsApp: normalizePhone(S.whatsappPhone || S.callPhone), ownerPhone: S.callPhone, businessName: S.businessName });
+  }
+
+  // Public: invoice / receipt data (needs the per-order token from the link, or a matching phone number)
+  const mDoc = p.match(/^\/api\/docs\/([A-Z0-9-]+)$/);
+  if (req.method === 'GET' && mDoc) {
+    const o = findOrder(mDoc[1]);
+    if (!o) return json(res, 404, { error: 'Document not found' });
+    const t = url.searchParams.get('t'), ph = url.searchParams.get('phone');
+    const okTok = t && o.token && crypto.timingSafeEqual(Buffer.from(t.padEnd(32)), Buffer.from(String(o.token).padEnd(32)));
+    if (!okTok && !(ph && normalizePhone(ph) === normalizePhone(o.phone))) return json(res, 403, { error: 'This link is not valid. Open it from your SMS/WhatsApp message or enter the phone number used for the order.' });
+    const S = loadSettings();
+    const { token, ...safe } = o;
+    return json(res, 200, { order: safe, business: { name: S.businessName, address: S.businessAddress, email: S.businessEmail, tin: S.businessTin, phone: S.callPhone, whatsapp: S.whatsappPhone, logo: S.logo ? `/logo.png?v=${S.logoVersion || 1}` : '/logo.svg', note: S.invoiceNote } });
   }
 
   // Public: customer confirms delivery → closes order
@@ -371,7 +436,7 @@ async function handleApi(req, res, url) {
 
     // Orders
     if (req.method === 'GET' && p === '/api/admin/orders') {
-      const list = loadOrders().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const list = loadOrders().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(o => ({ ...o, invoiceUrl: o.invoice ? `/invoice/${o.id}?t=${o.token}` : null, receiptUrl: o.receipt ? `/receipt/${o.id}?t=${o.token}` : null }));
       return json(res, 200, { orders: list, statuses: STATUS_FLOW, labels: STATUS_LABEL, settings: loadSettings() });
     }
     const mStatus = p.match(/^\/api\/admin\/orders\/([A-Z0-9-]+)\/status$/);
@@ -384,9 +449,24 @@ async function handleApi(req, res, url) {
     }
     const mPaid = p.match(/^\/api\/admin\/orders\/([A-Z0-9-]+)\/mark-paid$/);
     if (req.method === 'POST' && mPaid) {
-      const o = await updateOrder(mPaid[1], (x) => { x.payment.status = 'paid'; x.payment.method = 'manual'; x.payment.paidAt = new Date().toISOString(); });
-      if (!o) return json(res, 404, { error: 'Order not found' });
+      const b = (await readJsonBody(req)) || {};
+      const existing = findOrder(mPaid[1]);
+      if (!existing) return json(res, 404, { error: 'Order not found' });
+      if (existing.payment.status === 'paid') return json(res, 200, { ok: true, already: true });
+      const method = ['cash', 'momo', 'bank', 'card', 'other'].includes(b.method) ? b.method : 'cash';
+      const o = await updateOrder(mPaid[1], (x) => { x.payment = { ...x.payment, status: 'paid', method, channel: method, reference: String(b.reference || '').slice(0, 60), paidAt: new Date().toISOString() }; ensureReceipt(x); });
       if (o.status === 'pending_payment') await setStatus(o.id, 'placed');
+      else await notifyBoth(o.phone, clientMessage(o, 'receipt', loadSettings()));
+      return json(res, 200, { ok: true, receipt: o.receipt });
+    }
+    // Resend invoice / receipt link to the customer
+    const mSend = p.match(/^\/api\/admin\/orders\/([A-Z0-9-]+)\/send-(invoice|receipt)$/);
+    if (req.method === 'POST' && mSend) {
+      const o = findOrder(mSend[1]);
+      if (!o) return json(res, 404, { error: 'Order not found' });
+      const S = loadSettings();
+      if (mSend[2] === 'receipt') { if (!o.receipt) return json(res, 400, { error: 'No receipt yet – the invoice is unpaid.' }); await notifyBoth(o.phone, clientMessage(o, 'receipt', S)); }
+      else await notifyBoth(o.phone, `${S.businessName}: invoice ${o.invoice.number} for order ${o.id} – ${money(o.amount)} (${o.payment.status}). View: ${docLink(o, 'invoice')}`);
       return json(res, 200, { ok: true });
     }
 
@@ -500,6 +580,7 @@ const server = http.createServer(async (req, res) => {
     if (mImg) return serveProductImage(res, mImg[1], +mImg[2]);
     if (url.pathname === '/') return serveStatic(res, 'index.html');
     if (url.pathname === '/track') return serveStatic(res, 'track.html');
+    if (/^\/(invoice|receipt)\/[A-Z0-9-]+$/.test(url.pathname)) return serveStatic(res, 'doc.html');
     if (url.pathname === '/admin') return serveStatic(res, 'admin.html');
     return serveStatic(res, url.pathname.slice(1));
   } catch (e) { log('[error]', e); json(res, 500, { error: 'Server error' }); }

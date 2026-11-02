@@ -88,6 +88,8 @@
       actions += `<button class="btn" id="confirmBtn">✅ I have received my order</button><div class="note" style="text-align:center">Tap this once you have the item in hand to close the order.</div>`;
     }
     if (o.status === 'completed') actions += `<div class="success">🎉 Thank you! Your order is complete.</div>`;
+    if (o.invoiceUrl) actions += `<a class="btn secondary" href="${o.invoiceUrl}" target="_blank">🧾 View invoice${o.invoice ? ' ' + o.invoice.number : ''}</a>`;
+    if (o.receiptUrl) actions += `<a class="btn secondary" href="${o.receiptUrl}" target="_blank">🧾 View receipt${o.receipt ? ' ' + o.receipt.number : ''}</a>`;
     actions += `<a class="btn whatsapp" href="${wa}" target="_blank" rel="noopener">💬 Message seller on WhatsApp</a>`;
     actions += `<a class="btn secondary" href="/">🛒 Order again</a>`;
     $('actions').innerHTML = actions;
@@ -98,7 +100,7 @@
       const r = await fetch(`/api/orders/${o.id}/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) });
       const d = await r.json();
       if (!r.ok) { alert(d.error); cb.disabled = false; cb.textContent = '✅ I have received my order'; return; }
-      render({ ...d.order, ownerWhatsApp: o.ownerWhatsApp, ownerPhone: o.ownerPhone, businessName: o.businessName }, phone);
+      render({ ...d.order, ownerWhatsApp: o.ownerWhatsApp, ownerPhone: o.ownerPhone, businessName: o.businessName, invoiceUrl: o.invoiceUrl, receiptUrl: o.receiptUrl }, phone);
     };
   }
 

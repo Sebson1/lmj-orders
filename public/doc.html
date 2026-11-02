@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Invoice</title>
+<link rel="icon" href="/logo.png">
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { background: #eef2f8; }
+  .sheet { max-width: 760px; margin: 18px auto; background: #fff; border-radius: 14px; box-shadow: var(--shadow); padding: 34px 38px; position: relative; overflow: hidden; }
+  .top { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+  .top img { height: 86px; width: auto; max-width: 200px; object-fit: contain; }
+  .biz { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  .biz b { color: var(--b-900); font-size: 15px; }
+  .title { text-align: right; }
+  .title h1 { margin: 0; font-size: 34px; letter-spacing: 3px; color: var(--b-900); }
+  .title .no { font-weight: 800; font-size: 16px; color: var(--amber-d); }
+  .title .meta { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.6; }
+  .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 26px 0 18px; }
+  .parties div { background: var(--b-50); border-radius: 10px; padding: 12px 14px; font-size: 14px; line-height: 1.55; }
+  .parties small { display: block; text-transform: uppercase; letter-spacing: .6px; font-size: 11px; color: var(--muted); font-weight: 800; margin-bottom: 4px; }
+  table { margin-top: 6px; }
+  th { background: var(--b-900); color: #fff; font-weight: 700; }
+  th:first-child { border-radius: 8px 0 0 0; } th:last-child { border-radius: 0 8px 0 0; }
+  td.r, th.r { text-align: right; white-space: nowrap; }
+  .totals { margin-left: auto; width: 290px; margin-top: 10px; font-size: 15px; }
+  .totals div { display: flex; justify-content: space-between; padding: 6px 8px; }
+  .totals .grand { border-top: 2px solid var(--b-900); font-weight: 900; font-size: 19px; color: var(--b-900); margin-top: 4px; }
+  .stamp { position: absolute; right: 40px; top: 300px; transform: rotate(-14deg); border: 4px solid; border-radius: 10px; padding: 6px 16px; font-weight: 900; font-size: 26px; letter-spacing: 4px; opacity: .85; pointer-events: none; }
+  .stamp.paid { color: #1e8e4f; border-color: #1e8e4f; }
+  .stamp.unpaid { color: #c62828; border-color: #c62828; }
+  .pay { margin-top: 22px; background: #fff7ec; border: 1px solid #ffd8a8; border-radius: 10px; padding: 12px 14px; font-size: 14px; line-height: 1.6; }
+  .pay.ok { background: #e9f7ef; border-color: #b7e4c7; }
+  .foot { margin-top: 26px; text-align: center; color: var(--muted); font-size: 12px; border-top: 1px dashed var(--b-300); padding-top: 14px; }
+  .bar { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; padding: 0 16px 24px; }
+  .bar .btn { width: auto; margin-top: 0; padding: 10px 18px; font-size: 15px; }
+  .ask { max-width: 460px; margin: 40px auto; }
+  @media (max-width: 560px) { .sheet { padding: 22px 16px; } .parties { grid-template-columns: 1fr; } .title { text-align: left; } .stamp { top: 230px; right: 12px; font-size: 20px; } }
+  @media print { body { background: #fff; } .bar, .ask { display: none !important; } .sheet { box-shadow: none; margin: 0; max-width: none; border-radius: 0; } }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button class="btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+  <a class="btn secondary" id="otherDoc" href="#" style="display:none"></a>
+  <a class="btn ghost" id="trackLink" href="#">📦 Track order</a>
+  <a class="btn ghost" href="/">🛒 Shop</a>
+</div>
+
+<div class="card ask" id="ask" style="display:none">
+  <h2>Open your document</h2>
+  <div class="note">Enter the phone number you used for this order.</div>
+  <label for="ph">Phone number</label><input id="ph" type="tel" placeholder="e.g. 0241234567">
+  <div class="error" id="askErr"></div>
+  <button class="btn" id="askBtn">Open</button>
+</div>
+
+<div class="sheet" id="sheet" style="display:none">
+  <div class="stamp" id="stamp"></div>
+  <div class="top">
+    <div>
+      <img id="logo" src="/logo.png" alt="">
+      <div class="biz" id="biz"></div>
+    </div>
+    <div class="title">
+      <h1 id="kind">INVOICE</h1>
+      <div class="no" id="no"></div>
+      <div class="meta" id="meta"></div>
+    </div>
+  </div>
+
+  <div class="parties">
+    <div><small>Bill to</small><span id="billTo"></span></div>
+    <div><small id="fulfilLabel">Fulfilment</small><span id="fulfil"></span></div>
+  </div>
+
+  <table>
+    <thead><tr><th>#</th><th>Item</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="totals" id="totals"></div>
+
+  <div class="pay" id="pay"></div>
+  <div class="foot" id="foot"></div>
+</div>
+
+<script>
+(async function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const m = location.pathname.match(/^\/(invoice|receipt)\/([A-Z0-9-]+)$/);
+  if (!m) { document.body.innerHTML = '<div class="card ask">Document not found.</div>'; return; }
+  const kind = m[1], id = m[2];
+  const params = new URLSearchParams(location.search);
+  const money = n => 'GHS ' + Number(n).toFixed(2);
+  const fmtDate = d => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const fmtTime = d => new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  async function load(q) {
+    const r = await fetch(`/api/docs/${id}?${q}`); const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Not found');
+    return d;
+  }
+  function render({ order: o, business: B }) {
+    const isReceipt = kind === 'receipt';
+    if (isReceipt && !o.receipt) { $('ask').style.display = 'none'; document.querySelector('.bar').insertAdjacentHTML('afterend', '<div class="card ask"><h2>No receipt yet</h2><div class="note">This invoice has not been paid. The receipt will be issued automatically once payment is received.</div><a class="btn" href="/invoice/' + o.id + location.search + '">View invoice</a></div>'); return; }
+    const doc = isReceipt ? o.receipt : o.invoice;
+    document.title = `${isReceipt ? 'Receipt' : 'Invoice'} ${doc.number} – ${B.name}`;
+    $('kind').textContent = isReceipt ? 'RECEIPT' : 'INVOICE';
+    $('no').textContent = doc.number;
+    $('logo').src = B.logo;
+    $('biz').innerHTML = `<b>${esc(B.name)}</b><br>${B.address ? esc(B.address) + '<br>' : ''}Tel: ${esc(B.phone)}${B.whatsapp && B.whatsapp !== B.phone ? ' · WhatsApp: ' + esc(B.whatsapp) : ''}${B.email ? '<br>' + esc(B.email) : ''}${B.tin ? '<br>TIN: ' + esc(B.tin) : ''}`;
+    $('meta').innerHTML = `Date: ${fmtDate(doc.issuedAt)}<br>Order: ${esc(o.id)}${isReceipt ? '<br>Invoice: ' + esc(o.invoice.number) : ''}`;
+    $('billTo').innerHTML = `<b>${esc(o.name)}</b><br>${esc(o.phone)}${o.email ? '<br>' + esc(o.email) : ''}`;
+    $('fulfilLabel').textContent = o.fulfilment === 'delivery' ? 'Deliver to' : 'Pickup';
+    $('fulfil').innerHTML = o.fulfilment === 'delivery' ? esc(o.address) : 'Customer pickup' + (o.note ? '<br><i>' + esc(o.note) + '</i>' : '');
+    $('rows').innerHTML = o.items.map((it, i) => `<tr><td>${i + 1}</td><td>${esc(it.name)}</td><td class="r">${it.qty}</td><td class="r">${money(it.unitPrice)}</td><td class="r">${money(it.unitPrice * it.qty)}</td></tr>`).join('');
+    $('totals').innerHTML = `<div><span>Subtotal</span><span>${money(o.subtotal ?? o.amount)}</span></div>${o.deliveryFee ? `<div><span>Delivery</span><span>${money(o.deliveryFee)}</span></div>` : ''}<div class="grand"><span>${isReceipt ? 'Amount paid' : 'Total due'}</span><span>${money(o.amount)}</span></div>`;
+    const paid = o.payment.status === 'paid';
+    $('stamp').textContent = paid ? 'PAID' : 'UNPAID'; $('stamp').className = 'stamp ' + (paid ? 'paid' : 'unpaid');
+    if (isReceipt) {
+      $('pay').className = 'pay ok';
+      $('pay').innerHTML = `<b>Payment received</b> on ${fmtTime(doc.issuedAt)} by <b>${esc(String(doc.method || 'online').replace('mobile_money', 'Mobile Money').replace('momo', 'Mobile Money').replace('bank_transfer', 'Bank transfer'))}</b>${doc.reference ? ` · Ref: ${esc(doc.reference)}` : ''}.<br>This receipt settles invoice <b>${esc(o.invoice.number)}</b> in full.`;
+      $('otherDoc').href = `/invoice/${o.id}${location.search}`; $('otherDoc').textContent = '🧾 View invoice'; $('otherDoc').style.display = '';
+    } else if (paid) {
+      $('pay').className = 'pay ok';
+      $('pay').innerHTML = `<b>Paid</b> on ${fmtTime(o.payment.paidAt)}. Receipt <b>${esc(o.receipt ? o.receipt.number : '')}</b> has been issued.`;
+      $('otherDoc').href = `/receipt/${o.id}${location.search}`; $('otherDoc').textContent = '🧾 View receipt'; $('otherDoc').style.display = '';
+    } else {
+      $('pay').className = 'pay';
+      $('pay').innerHTML = `<b>Payment due:</b> ${money(o.amount)}. Pay online via Paystack from the <a href="/track?id=${o.id}">tracking page</a>, or by cash / Mobile Money on ${o.fulfilment === 'delivery' ? 'delivery' : 'pickup'}. A receipt will be issued automatically once payment is received.`;
+    }
+    $('foot').textContent = B.note || '';
+    $('trackLink').href = `/track?id=${o.id}`;
+    $('sheet').style.display = 'block';
+  }
+  try {
+    if (params.get('t')) render(await load('t=' + encodeURIComponent(params.get('t'))));
+    else throw new Error('need phone');
+  } catch (e) {
+    $('ask').style.display = 'block';
+    $('askBtn').onclick = async () => { try { render(await load('phone=' + encodeURIComponent($('ph').value))); $('ask').style.display = 'none'; } catch (ex) { $('askErr').textContent = ex.message; $('askErr').style.display = 'block'; } };
+  }
+})();
+</script>
+</body>
+</html>

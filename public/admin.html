@@ -46,6 +46,7 @@
   <div id="dash" style="display:none">
     <div class="tabs">
       <button class="on" data-tab="orders">📦 Orders</button>
+      <button data-tab="invoices">🧾 Invoices</button>
       <button data-tab="products">🛍️ Products</button>
       <button data-tab="settings">⚙️ Settings</button>
     </div>
@@ -69,6 +70,34 @@
           </table>
         </div>
         <div class="note">Every status change automatically sends the customer an SMS and WhatsApp message. Use 💬 to open a WhatsApp chat with the customer. The list refreshes every 30 seconds.</div>
+      </div>
+    </div>
+
+    <!-- INVOICES -->
+    <div id="tab-invoices" style="display:none">
+      <div class="stats" id="istats"></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <h2 style="margin:0">Invoices & receipts</h2>
+          <select id="ifilter" style="width:auto;padding:8px 12px"><option value="all">All</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option></select>
+        </div>
+        <div style="overflow-x:auto;margin-top:12px">
+          <table>
+            <thead><tr><th>Invoice</th><th>Customer</th><th class="hide-m">Amount</th><th>Status</th><th>Receipt</th><th>Actions</th></tr></thead>
+            <tbody id="irows"></tbody>
+          </table>
+        </div>
+        <div class="note">An invoice is created for every order. A receipt is issued automatically when the invoice is paid — online via Paystack, or when you tap <b>Record payment</b> for cash / MoMo received in person. Customers get the links by SMS and WhatsApp.</div>
+      </div>
+      <div class="card" id="payform" style="display:none;margin-top:14px">
+        <h2>Record payment</h2>
+        <div id="payfor" class="note" style="font-size:15px;color:var(--ink)"></div>
+        <label>How was it paid?</label>
+        <select id="pay_method"><option value="cash">Cash</option><option value="momo">Mobile Money</option><option value="bank">Bank transfer</option><option value="card">Card</option><option value="other">Other</option></select>
+        <label>Reference (optional – e.g. MoMo transaction ID)</label><input id="pay_ref" placeholder="e.g. 7HG3K9…">
+        <div class="error" id="payerr"></div>
+        <button class="btn" id="paySave">✅ Confirm payment & issue receipt</button>
+        <button class="btn secondary" id="payCancel">Cancel</button>
       </div>
     </div>
 
@@ -116,6 +145,11 @@
           <img id="s_logoPreview" src="/logo.png" alt="" style="width:90px;height:90px;object-fit:contain;border:1.5px dashed var(--b-300);border-radius:10px;background:#fff">
           <div><input type="file" id="s_logoFile" accept="image/*" style="padding:8px"><div class="note">PNG with a transparent background looks best. <a href="#" id="s_logoReset">Use default logo</a></div></div>
         </div>
+        <h3>Invoice & receipt details</h3>
+        <label>Business address (printed on invoices)</label><input id="s_businessAddress" placeholder="e.g. Shop 12, Madina Market, Accra">
+        <label>Business email (optional)</label><input id="s_businessEmail" type="email" placeholder="e.g. orders@lmjventures.com">
+        <label>TIN / tax number (optional)</label><input id="s_businessTin" placeholder="e.g. C0001234567">
+        <label>Footer note on invoices & receipts</label><input id="s_invoiceNote" placeholder="e.g. Thank you for your business.">
         <h3>Phone numbers</h3>
         <label>Owner alert number (receives every order by SMS + WhatsApp)</label><input id="s_ownerPhone" type="tel">
         <label>"Call to order" number shown to customers</label><input id="s_callPhone" type="tel">
@@ -145,7 +179,7 @@
   const KEY = 'lmj_admin_key';
   let key = sessionStorage.getItem(KEY) || '';
   let DATA = null, PRODUCTS = [], SETTINGS = {};
-  const SKEYS = ['businessName', 'tagline', 'ownerPhone', 'callPhone', 'whatsappPhone', 'deliveryFee', 'pickupInfo', 'footerNote'];
+  const SKEYS = ['businessName', 'tagline', 'ownerPhone', 'callPhone', 'whatsappPhone', 'deliveryFee', 'pickupInfo', 'footerNote', 'businessAddress', 'businessEmail', 'businessTin', 'invoiceNote'];
   const NEXT = { pending_payment: ['placed', 'cancelled'], placed: ['accepted', 'cancelled'], accepted: ['processing', 'cancelled'], processing: ['ready', 'cancelled'], ready: ['delivered', 'completed'], delivered: ['completed'], completed: [], cancelled: ['placed'] };
   const BTN = { placed: 'Mark placed', accepted: '✔ Accept', processing: '⚙ Processing', ready: '📦 Ready', delivered: '🛵 Delivered', completed: '✅ Close', cancelled: '✕ Cancel' };
 
@@ -163,7 +197,8 @@
   // ---- tabs
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
     document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
-    ['orders', 'products', 'settings'].forEach(t => $('tab-' + t).style.display = b.dataset.tab === t ? 'block' : 'none');
+    ['orders', 'invoices', 'products', 'settings'].forEach(t => $('tab-' + t).style.display = b.dataset.tab === t ? 'block' : 'none');
+    if (b.dataset.tab === 'invoices') load().then(renderInvoices);
     if (b.dataset.tab === 'products') loadProducts();
     if (b.dataset.tab === 'settings') loadSettings();
   });
@@ -189,9 +224,9 @@
       const items = (o.items || [{ name: 'bottle', qty: o.qty }]).map(i => `${i.qty} × ${esc(i.name)}`).join('<br>');
       const wa = `https://wa.me/${normalize(o.phone)}?text=${encodeURIComponent(`Hello ${o.name}, this is ${SETTINGS.businessName} about your order ${o.id} (GHS ${o.amount}). `)}`;
       const btns = NEXT[o.status].map(s => `<button class="btn small ${s === 'cancelled' ? 'ghost' : ''}" data-id="${o.id}" data-status="${s}">${BTN[s]}</button>`).join('');
-      const markPaid = !paid ? `<button class="btn small ghost" data-id="${o.id}" data-paid="1">💵 Mark paid</button>` : '';
+      const markPaid = !paid ? `<button class="btn small ghost" data-id="${o.id}" data-paid="1">💵 Record payment</button>` : '';
       return `<tr>
-        <td><b>${o.id}</b><br><small style="color:var(--muted)">${new Date(o.createdAt).toLocaleString()}</small></td>
+        <td><b>${o.id}</b><br><small style="color:var(--muted)">${new Date(o.createdAt).toLocaleString()}</small>${o.invoice ? `<br><a href="${o.invoiceUrl}" target="_blank" style="font-size:12px">🧾 ${esc(o.invoice.number)}</a>` : ''}</td>
         <td>${esc(o.name)}<br><a href="tel:${o.phone}">${o.phone}</a> <a href="${wa}" target="_blank" rel="noopener" title="WhatsApp">💬</a></td>
         <td class="hide-m">${items}<br><b>GHS ${o.amount}</b><br>${o.fulfilment === 'delivery' ? '🛵 ' + esc(o.address) : '🏪 Pickup'}${o.note ? '<br><i>' + esc(o.note) + '</i>' : ''}</td>
         <td><span class="pill ${paid ? 'paid' : 'unpaid'}">${o.payment.status}</span></td>
@@ -204,11 +239,57 @@
       try { await api(`/api/admin/orders/${b.dataset.id}/status`, { method: 'POST', body: JSON.stringify({ status: b.dataset.status }) }); await load(); }
       catch (e) { alert(e.message); b.disabled = false; }
     });
-    $('rows').querySelectorAll('button[data-paid]').forEach(b => b.onclick = async () => {
-      if (!confirm('Mark order ' + b.dataset.id + ' as paid (cash/MoMo received)?')) return;
-      try { await api(`/api/admin/orders/${b.dataset.id}/mark-paid`, { method: 'POST' }); await load(); } catch (e) { alert(e.message); }
+    $('rows').querySelectorAll('button[data-paid]').forEach(b => b.onclick = () => openPay(b.dataset.id));
+  }
+
+  // ---- invoices
+  function renderInvoices() {
+    if (!DATA) return;
+    const f = $('ifilter').value;
+    const all = DATA.orders.filter(o => o.invoice && o.status !== 'cancelled');
+    const unpaid = all.filter(o => o.payment.status !== 'paid');
+    const paidSum = all.filter(o => o.payment.status === 'paid').reduce((s, o) => s + o.amount, 0);
+    const dueSum = unpaid.reduce((s, o) => s + o.amount, 0);
+    $('istats').innerHTML = `
+      <div><b>${all.length}</b><span>Invoices</span></div>
+      <div><b>${unpaid.length}</b><span>Unpaid</span></div>
+      <div><b>GHS ${dueSum.toFixed(0)}</b><span>Outstanding</span></div>
+      <div><b>GHS ${paidSum.toFixed(0)}</b><span>Receipted</span></div>`;
+    const list = f === 'unpaid' ? unpaid : f === 'paid' ? all.filter(o => o.payment.status === 'paid') : all;
+    $('irows').innerHTML = list.length ? list.map(o => {
+      const paid = o.payment.status === 'paid';
+      return `<tr>
+        <td><a href="${o.invoiceUrl}" target="_blank"><b>${esc(o.invoice.number)}</b></a><br><small style="color:var(--muted)">${new Date(o.invoice.issuedAt).toLocaleDateString()} · ${o.id}</small></td>
+        <td>${esc(o.name)}<br><small>${o.phone}</small></td>
+        <td class="hide-m"><b>GHS ${o.amount.toFixed(2)}</b></td>
+        <td><span class="pill ${paid ? 'paid' : 'unpaid'}">${paid ? 'PAID' : 'UNPAID'}</span></td>
+        <td>${o.receipt ? `<a href="${o.receiptUrl}" target="_blank">${esc(o.receipt.number)}</a><br><small style="color:var(--muted)">${new Date(o.receipt.issuedAt).toLocaleDateString()}</small>` : '—'}</td>
+        <td>${paid ? `<button class="btn small ghost" data-send="receipt" data-id="${o.id}">📨 Resend receipt</button>` : `<button class="btn small" data-paid="1" data-id="${o.id}">💵 Record payment</button><button class="btn small ghost" data-send="invoice" data-id="${o.id}">📨 Resend invoice</button>`}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--muted)">No invoices here.</td></tr>';
+    $('irows').querySelectorAll('button[data-paid]').forEach(b => b.onclick = () => openPay(b.dataset.id));
+    $('irows').querySelectorAll('button[data-send]').forEach(b => b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Sending…';
+      try { await api(`/api/admin/orders/${b.dataset.id}/send-${b.dataset.send}`, { method: 'POST' }); b.textContent = 'Sent ✔'; setTimeout(renderInvoices, 1500); }
+      catch (e) { alert(e.message); renderInvoices(); }
     });
   }
+  $('ifilter').onchange = renderInvoices;
+  let payId = null;
+  function openPay(id) {
+    const o = DATA.orders.find(x => x.id === id); if (!o) return;
+    payId = id; $('payfor').innerHTML = `Invoice <b>${esc(o.invoice ? o.invoice.number : o.id)}</b> · ${esc(o.name)} · <b>GHS ${o.amount.toFixed(2)}</b>`;
+    $('pay_ref').value = ''; $('payerr').style.display = 'none';
+    document.querySelector('.tabs button[data-tab=invoices]').click();
+    $('payform').style.display = 'block'; $('payform').scrollIntoView({ behavior: 'smooth' });
+  }
+  $('payCancel').onclick = () => { $('payform').style.display = 'none'; };
+  $('paySave').onclick = async () => {
+    $('paySave').disabled = true;
+    try { await api(`/api/admin/orders/${payId}/mark-paid`, { method: 'POST', body: JSON.stringify({ method: $('pay_method').value, reference: $('pay_ref').value }) }); $('payform').style.display = 'none'; await load(); renderInvoices(); }
+    catch (e) { $('payerr').textContent = e.message; $('payerr').style.display = 'block'; }
+    $('paySave').disabled = false;
+  };
 
   // ---- products
   async function loadProducts() {
