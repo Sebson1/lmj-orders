@@ -225,7 +225,7 @@ async function sendSMS(to, message) {
     const data = await r.json().catch(() => ({}));
     log('[mNotify]', recipient, r.status, JSON.stringify(data).slice(0, 200));
     const ok = r.ok && data.status === 'success';
-    const err = ok ? '' : (data.message || (data.errors && Object.values(data.errors).flat().join(' ')) || `mNotify HTTP ${r.status}`);
+    const err = ok ? '' : (data.error || data.message || (data.errors && Object.values(data.errors).flat().join(' ')) || `mNotify HTTP ${r.status}`);
     return { ok, error: err, raw: data };
   } catch (e) { log('[mNotify error]', e.message); return { ok: false, error: e.message }; }
 }
@@ -453,7 +453,7 @@ async function handleApi(req, res, url) {
     if (!delivered) {
       MEM.auth = { ...a, reset: null }; await persist('auth', MEM.auth);
       log('[auth] reset code could NOT be sent:', sent.sms && sent.sms.error);
-      return json(res, 502, { error: 'The code could not be sent. SMS service said: ' + ((sent.sms && sent.sms.error) || 'unknown error') + '. Check the SMS settings in Render (MNOTIFY_API_KEY / sender ID) or sign in with the password from Render.' });
+      return json(res, 502, { error: 'The code could not be sent. SMS service said: "' + ((sent.sms && sent.sms.error) || 'unknown error') + '". If it mentions the sender ID, sign in with your current password and set an approved mNotify sender name under Settings → SMS.' });
     }
     log('[auth] password reset code sent to owner phone');
     return json(res, 200, { ok: true, sentTo: maskPhone(S.ownerPhone) });
