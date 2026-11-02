@@ -15,7 +15,7 @@ const ENV = {
   baseUrl: (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, ''),
   adminKey: process.env.ADMIN_KEY || 'change-me',
   mnotifyKey: process.env.MNOTIFY_API_KEY || '',
-  mnotifySender: process.env.MNOTIFY_SENDER_ID || 'LMJ',
+  mnotifySender: (process.env.MNOTIFY_SENDER_ID || 'LMJ').trim().slice(0, 11), // mNotify allows max 11 characters
   paystackSecret: process.env.PAYSTACK_SECRET_KEY || '',
   waToken: process.env.WHATSAPP_TOKEN || '',
   waPhoneId: process.env.WHATSAPP_PHONE_ID || '',
@@ -44,6 +44,7 @@ const DEFAULT_SETTINGS = {
   businessEmail: '',
   businessTin: '',                                         // optional tax ID
   invoiceNote: 'Thank you for your business.',             // printed at the bottom of invoices/receipts
+  smsSender: '',                                           // mNotify sender ID (max 11 chars); blank = MNOTIFY_SENDER_ID env
 };
 const DEFAULT_PRODUCTS = [{
   id: 'lmj-pink-blossom', name: 'LMJ Surface Disinfectant – Pink Blossom', size: '100ml', category: 'Disinfectants',
@@ -212,18 +213,21 @@ async function readJsonBody(req) { try { return JSON.parse(await readBody(req) |
 function log(...a) { console.log(new Date().toISOString(), ...a); }
 
 // ---------- messaging ----------
+function smsSender() { const s = (loadSettings().smsSender || ENV.mnotifySender || 'LMJ').trim().slice(0, 11); return s || 'LMJ'; }
 async function sendSMS(to, message) {
   const recipient = normalizePhone(to);
-  if (!ENV.mnotifyKey) { log('[SMS not configured] →', recipient, '|', message); return { mock: true }; }
+  if (!ENV.mnotifyKey) { log('[SMS not configured] →', recipient, '|', message); return { ok: false, mock: true, error: 'SMS not configured (MNOTIFY_API_KEY missing)' }; }
   try {
     const r = await fetch('https://api.mnotify.com/api/sms/quick?key=' + encodeURIComponent(ENV.mnotifyKey), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient: [recipient], sender: ENV.mnotifySender, message, is_schedule: 'false', schedule_date: '' }),
+      body: JSON.stringify({ recipient: [recipient], sender: smsSender(), message, is_schedule: 'false', schedule_date: '' }),
     });
     const data = await r.json().catch(() => ({}));
     log('[mNotify]', recipient, r.status, JSON.stringify(data).slice(0, 200));
-    return data;
-  } catch (e) { log('[mNotify error]', e.message); return { error: e.message }; }
+    const ok = r.ok && data.status === 'success';
+    const err = ok ? '' : (data.message || (data.errors && Object.values(data.errors).flat().join(' ')) || `mNotify HTTP ${r.status}`);
+    return { ok, error: err, raw: data };
+  } catch (e) { log('[mNotify error]', e.message); return { ok: false, error: e.message }; }
 }
 async function sendWhatsApp(to, message) {
   const recipient = normalizePhone(to);
@@ -238,7 +242,7 @@ async function sendWhatsApp(to, message) {
     return data;
   } catch (e) { log('[WhatsApp error]', e.message); return { error: e.message }; }
 }
-async function notifyBoth(to, message) { await Promise.all([sendSMS(to, message), sendWhatsApp(to, message)]); }
+async function notifyBoth(to, message) { const [sms, wa] = await Promise.all([sendSMS(to, message), sendWhatsApp(to, message)]); return { sms, wa }; }
 
 function trackLink(o) { return `${ENV.baseUrl}/track?id=${o.id}`; }
 function itemsText(o) { return o.items.map(i => `${i.qty} x ${i.name}`).join(', '); }
@@ -444,7 +448,13 @@ async function handleApi(req, res, url) {
     const code = String(crypto.randomInt(100000, 999999));
     MEM.auth = { ...a, reset: { ...hashPassword(code), sentAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(), attempts: 0 } };
     await persist('auth', MEM.auth);
-    await notifyBoth(S.ownerPhone, `${S.businessName} admin: your password reset code is ${code}. It expires in 10 minutes. If you did not request this, ignore this message.`);
+    const sent = await notifyBoth(S.ownerPhone, `${S.businessName} admin: your password reset code is ${code}. It expires in 10 minutes. If you did not request this, ignore this message.`);
+    const delivered = (sent.sms && sent.sms.ok) || (sent.wa && !sent.wa.mock && !sent.wa.error);
+    if (!delivered) {
+      MEM.auth = { ...a, reset: null }; await persist('auth', MEM.auth);
+      log('[auth] reset code could NOT be sent:', sent.sms && sent.sms.error);
+      return json(res, 502, { error: 'The code could not be sent. SMS service said: ' + ((sent.sms && sent.sms.error) || 'unknown error') + '. Check the SMS settings in Render (MNOTIFY_API_KEY / sender ID) or sign in with the password from Render.' });
+    }
     log('[auth] password reset code sent to owner phone');
     return json(res, 200, { ok: true, sentTo: maskPhone(S.ownerPhone) });
   }
@@ -478,6 +488,13 @@ async function handleApi(req, res, url) {
   // ---------- Admin ----------
   if (p.startsWith('/api/admin/')) {
     if (!checkAdmin(req.headers['x-admin-key'])) return json(res, 401, { error: 'Unauthorized' });
+
+    // Send a test SMS to the owner alert number and report what mNotify said
+    if (req.method === 'POST' && p === '/api/admin/test-sms') {
+      const S = loadSettings();
+      const r = await sendSMS(S.ownerPhone, `${S.businessName}: test message from your order site. SMS is working.`);
+      return json(res, r.ok ? 200 : 502, { ok: r.ok, sender: smsSender(), to: maskPhone(S.ownerPhone), error: r.error || '' });
+    }
 
     // Change password (signed in)
     if (req.method === 'POST' && p === '/api/admin/password') {
@@ -536,6 +553,7 @@ async function handleApi(req, res, url) {
         S.logo = b.logo; S.logoVersion = (S.logoVersion || 0) + 1;
       }
       if (normalizePhone(S.ownerPhone).length < 12) return json(res, 400, { error: 'Owner alert number is not a valid Ghana number.' });
+      if (S.smsSender && !/^[A-Za-z0-9 ]{1,11}$/.test(S.smsSender)) return json(res, 400, { error: 'SMS sender ID must be 1–11 letters/numbers (mNotify limit).' });
       await saveSettings(S);
       return json(res, 200, { ...S, logo: S.logo ? `/logo.png?v=${S.logoVersion}` : '' });
     }

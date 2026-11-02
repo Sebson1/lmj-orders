@@ -170,6 +170,9 @@
         <label>Business email (optional)</label><input id="s_businessEmail" type="email" placeholder="e.g. orders@lmjventures.com">
         <label>TIN / tax number (optional)</label><input id="s_businessTin" placeholder="e.g. C0001234567">
         <label>Footer note on invoices & receipts</label><input id="s_invoiceNote" placeholder="e.g. Thank you for your business.">
+        <h3>SMS</h3>
+        <label>SMS sender name (max 11 characters, must be approved on your mNotify account)</label><input id="s_smsSender" maxlength="11" placeholder="e.g. LMJ">
+        <div class="note">This is the name customers see as the SMS sender. <a href="#" id="testSms">Send a test SMS to the owner number</a> <span id="testSmsOut"></span></div>
         <h3>Phone numbers</h3>
         <label>Owner alert number (receives every order by SMS + WhatsApp)</label><input id="s_ownerPhone" type="tel">
         <label>"Call to order" number shown to customers</label><input id="s_callPhone" type="tel">
@@ -209,7 +212,7 @@
   const KEY = 'lmj_admin_key';
   let key = sessionStorage.getItem(KEY) || '';
   let DATA = null, PRODUCTS = [], SETTINGS = {};
-  const SKEYS = ['businessName', 'tagline', 'ownerPhone', 'callPhone', 'whatsappPhone', 'deliveryFee', 'pickupInfo', 'footerNote', 'businessAddress', 'businessEmail', 'businessTin', 'invoiceNote'];
+  const SKEYS = ['businessName', 'tagline', 'ownerPhone', 'callPhone', 'whatsappPhone', 'deliveryFee', 'pickupInfo', 'footerNote', 'businessAddress', 'businessEmail', 'businessTin', 'invoiceNote', 'smsSender'];
   const NEXT = { pending_payment: ['placed', 'cancelled'], placed: ['accepted', 'cancelled'], accepted: ['processing', 'cancelled'], processing: ['ready', 'cancelled'], ready: ['delivered', 'completed'], delivered: ['completed'], completed: [], cancelled: ['placed'] };
   const BTN = { placed: 'Mark placed', accepted: '✔ Accept', processing: '⚙ Processing', ready: '📦 Ready', delivered: '🛵 Delivered', completed: '✅ Close', cancelled: '✕ Cancel' };
 
@@ -411,6 +414,11 @@
     $('serr').style.display = 'none'; $('sok').style.display = 'none';
     try { SETTINGS = await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) }); pendingLogo = undefined; $('s_logoPreview').src = SETTINGS.logo || '/logo.svg'; document.querySelector('header.brand img').src = (SETTINGS.logo || '/logo.svg'); $('sok').style.display = 'block'; setTimeout(() => $('sok').style.display = 'none', 2500); }
     catch (e) { $('serr').textContent = e.message; $('serr').style.display = 'block'; }
+  };
+  $('testSms').onclick = async (e) => {
+    e.preventDefault(); const out = $('testSmsOut'); out.textContent = ' Sending…';
+    try { const r = await api('/api/admin/test-sms', { method: 'POST' }); out.innerHTML = ` <b style="color:var(--ok)">Sent ✔</b> (sender "${esc(r.sender)}" → ${esc(r.to)})`; }
+    catch (ex) { out.innerHTML = ` <b style="color:#b00020">Failed:</b> ${esc(ex.message)}`; }
   };
   $('backupBtn').onclick = async () => {
     const r = await fetch('/api/admin/backup', { headers: { 'x-admin-key': key } });
