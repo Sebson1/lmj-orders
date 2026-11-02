@@ -26,6 +26,7 @@ const FILES = {
   orders: path.join(DATA_DIR, 'orders.json'),
   products: path.join(DATA_DIR, 'products.json'),
   settings: path.join(DATA_DIR, 'settings.json'),
+  auth: path.join(DATA_DIR, 'auth.json'),
 };
 
 // Defaults used the first time (and as fallback). The owner edits these from /admin → Settings.
@@ -75,6 +76,7 @@ async function persist(key, value) {
     await sbFetch('POST', '', { key, value, updated_at: new Date().toISOString() });
   } else {
     if (key === 'settings') writeJson(FILES.settings, value);
+    else if (key === 'auth') writeJson(FILES.auth, value);
     else if (key === 'products') writeJson(FILES.products, value);
     else writeJson(FILES.orders, [...MEM.orders.values()]);
   }
@@ -85,12 +87,14 @@ async function initStore() {
     const rows = await sbFetch('GET', '?select=key,value&limit=10000');
     for (const r of rows) {
       if (r.key === 'settings') MEM.settings = r.value;
+      else if (r.key === 'auth') MEM.auth = r.value;
       else if (r.key === 'products') MEM.products = r.value;
       else if (r.key.startsWith('order:')) MEM.orders.set(r.value.id, r.value);
     }
     log(`[store] Supabase connected – ${MEM.orders.size} orders, ${(MEM.products || DEFAULT_PRODUCTS).length} products`);
   } else {
     MEM.settings = readJson(FILES.settings, null);
+    MEM.auth = readJson(FILES.auth, null);
     MEM.products = readJson(FILES.products, null);
     for (const o of readJson(FILES.orders, [])) MEM.orders.set(o.id, o);
     log('[store] using local JSON files in ./data (set SUPABASE_URL + SUPABASE_SERVICE_KEY for permanent storage)');
@@ -122,6 +126,21 @@ async function saveOrder(o) { MEM.orders.set(o.id, o); await persist('order:' + 
 // Documents are viewed at /invoice/<orderId>?t=<token> and /receipt/<orderId>?t=<token>; the token is a
 // per-order secret so the links in SMS/WhatsApp open without typing the phone number.
 MEM.counters = null;
+
+// ---------- admin password ----------
+// The password set from the dashboard is stored hashed (scrypt) under the 'auth' key. Until one is set,
+// the ADMIN_KEY environment variable is the password. "Forgot password" sends a one-time code to the
+// owner alert number (Settings → Owner alert number) by SMS + WhatsApp.
+MEM.auth = MEM.auth || null;
+function hashPassword(pw, salt) { salt = salt || crypto.randomBytes(16).toString('hex'); return { salt, hash: crypto.scryptSync(String(pw), salt, 32).toString('hex') }; }
+function safeEq(a, b) { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); }
+function checkAdmin(key) {
+  if (!key) return false;
+  if (MEM.auth && MEM.auth.hash) return safeEq(hashPassword(key, MEM.auth.salt).hash, MEM.auth.hash);
+  return safeEq(key, ENV.adminKey);
+}
+async function setAdminPassword(pw) { MEM.auth = { ...hashPassword(pw), reset: null, changedAt: new Date().toISOString() }; await persist('auth', MEM.auth); }
+function maskPhone(p) { const d = String(p); return d.slice(0, 3) + '****' + d.slice(-3); }
 function nextNumber(kind) {
   const year = new Date().getFullYear();
   const c = MEM.counters || (MEM.counters = {});
@@ -417,6 +436,32 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true, order: done });
   }
 
+  // ---------- Admin password reset (public, protected by a one-time SMS code) ----------
+  if (req.method === 'POST' && p === '/api/auth/reset/request') {
+    const S = loadSettings();
+    const a = MEM.auth || {};
+    if (a.reset && Date.now() - new Date(a.reset.sentAt).getTime() < 60 * 1000) return json(res, 429, { error: 'A code was sent less than a minute ago. Please wait before requesting another.' });
+    const code = String(crypto.randomInt(100000, 999999));
+    MEM.auth = { ...a, reset: { ...hashPassword(code), sentAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(), attempts: 0 } };
+    await persist('auth', MEM.auth);
+    await notifyBoth(S.ownerPhone, `${S.businessName} admin: your password reset code is ${code}. It expires in 10 minutes. If you did not request this, ignore this message.`);
+    log('[auth] password reset code sent to owner phone');
+    return json(res, 200, { ok: true, sentTo: maskPhone(S.ownerPhone) });
+  }
+  if (req.method === 'POST' && p === '/api/auth/reset/confirm') {
+    const b = (await readJsonBody(req)) || {};
+    const a = MEM.auth || {}; const r = a.reset;
+    if (!r) return json(res, 400, { error: 'No reset code has been requested.' });
+    if (Date.now() > new Date(r.expiresAt).getTime()) { MEM.auth = { ...a, reset: null }; await persist('auth', MEM.auth); return json(res, 400, { error: 'The code has expired. Please request a new one.' }); }
+    if (r.attempts >= 5) { MEM.auth = { ...a, reset: null }; await persist('auth', MEM.auth); return json(res, 400, { error: 'Too many wrong attempts. Please request a new code.' }); }
+    if (!safeEq(hashPassword(String(b.code || '').trim(), r.salt).hash, r.hash)) { r.attempts++; await persist('auth', MEM.auth); return json(res, 400, { error: `Wrong code. ${5 - r.attempts} attempt(s) left.` }); }
+    const pw = String(b.newPassword || '');
+    if (pw.length < 8) return json(res, 400, { error: 'New password must be at least 8 characters.' });
+    await setAdminPassword(pw);
+    log('[auth] admin password reset via SMS code');
+    return json(res, 200, { ok: true });
+  }
+
   // Paystack webhook
   if (req.method === 'POST' && p === '/api/paystack/webhook') {
     const raw = await readBody(req);
@@ -432,7 +477,17 @@ async function handleApi(req, res, url) {
 
   // ---------- Admin ----------
   if (p.startsWith('/api/admin/')) {
-    if (req.headers['x-admin-key'] !== ENV.adminKey) return json(res, 401, { error: 'Unauthorized' });
+    if (!checkAdmin(req.headers['x-admin-key'])) return json(res, 401, { error: 'Unauthorized' });
+
+    // Change password (signed in)
+    if (req.method === 'POST' && p === '/api/admin/password') {
+      const b = (await readJsonBody(req)) || {};
+      if (!checkAdmin(b.current)) return json(res, 400, { error: 'Current password is incorrect.' });
+      const pw = String(b.newPassword || '');
+      if (pw.length < 8) return json(res, 400, { error: 'New password must be at least 8 characters.' });
+      await setAdminPassword(pw);
+      return json(res, 200, { ok: true });
+    }
 
     // Orders
     if (req.method === 'GET' && p === '/api/admin/orders') {

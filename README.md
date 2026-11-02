@@ -30,7 +30,7 @@ Every message includes the tracking link so the customer can always see where th
 
 1. **Install Node.js** (v18 or newer) from https://nodejs.org – nothing else to install, there are no dependencies.
 2. Copy `.env.example` to `.env` and fill in:
-   - `ADMIN_KEY` – a strong password for `/admin`
+   - `ADMIN_KEY` – the initial password for `/admin`. Once you change it from the dashboard (Settings → Change password, or "Forgot password" on the sign-in screen, which sends a code to the owner alert number) the dashboard password lives in the database and this variable is no longer used.
    - `OWNER_PHONE` – the number that receives orders (default `0535623533`)
    - `MNOTIFY_API_KEY` – from https://mnotify.com → Developer → API key. `MNOTIFY_SENDER_ID` must be a sender ID approved on your mNotify account (max 11 characters, e.g. `LMJ`).
    - `PAYSTACK_SECRET_KEY` – from https://dashboard.paystack.com → Settings → API Keys & Webhooks. Use the **test** key first (`sk_test_…`), then the **live** key.

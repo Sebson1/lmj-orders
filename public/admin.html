@@ -41,6 +41,26 @@
     <input id="key" type="password" placeholder="Your admin password">
     <div class="error" id="err"></div>
     <button class="btn" id="loginBtn">Open dashboard</button>
+    <div class="note" style="text-align:center"><a href="#" id="forgotLink">Forgot password?</a></div>
+  </div>
+
+  <div class="card" id="reset" style="display:none">
+    <h2>Reset password</h2>
+    <div id="resetStep1">
+      <div class="note" style="font-size:14px">We'll send a 6-digit code by SMS and WhatsApp to the owner alert number on file.</div>
+      <div class="error" id="rerr1"></div>
+      <button class="btn" id="sendCode">📲 Send me a code</button>
+    </div>
+    <div id="resetStep2" style="display:none">
+      <div class="success" id="sentMsg"></div>
+      <label for="r_code">6-digit code</label><input id="r_code" inputmode="numeric" maxlength="6" placeholder="123456">
+      <label for="r_pw">New password (at least 8 characters)</label><input id="r_pw" type="password">
+      <label for="r_pw2">Repeat new password</label><input id="r_pw2" type="password">
+      <div class="error" id="rerr2"></div>
+      <button class="btn" id="confirmReset">✅ Set new password</button>
+      <div class="note" style="text-align:center"><a href="#" id="resendCode">Resend code</a></div>
+    </div>
+    <div class="note" style="text-align:center"><a href="#" id="backToLogin">← Back to sign in</a></div>
   </div>
 
   <div id="dash" style="display:none">
@@ -161,6 +181,16 @@
         <div class="error" id="serr"></div>
         <div class="success" id="sok" style="display:none">Saved ✔</div>
         <button class="btn" id="saveSettings">💾 Save settings</button>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h2>Change password</h2>
+        <label for="c_cur">Current password</label><input id="c_cur" type="password">
+        <label for="c_new">New password (at least 8 characters)</label><input id="c_new" type="password">
+        <label for="c_new2">Repeat new password</label><input id="c_new2" type="password">
+        <div class="error" id="cerr"></div>
+        <div class="success" id="cok" style="display:none">Password changed ✔</div>
+        <button class="btn" id="changePw">🔑 Change password</button>
+        <div class="note">Forgot it? Sign out and use "Forgot password" on the sign-in screen — a code is sent to the owner alert number.</div>
       </div>
       <div class="card" style="margin-top:14px">
         <h2>Backup</h2>
@@ -392,6 +422,43 @@
     try { await api('/api/admin/restore', { method: 'POST', body: await f.text() }); alert('Restored ✔'); loadSettings(); loadProducts(); load(); }
     catch (e) { alert(e.message); }
     $('restoreFile').value = '';
+  };
+
+  // ---- password reset / change
+  const showReset = (on) => { $('login').style.display = on ? 'none' : 'block'; $('reset').style.display = on ? 'block' : 'none'; $('resetStep1').style.display = 'block'; $('resetStep2').style.display = 'none'; };
+  $('forgotLink').onclick = (e) => { e.preventDefault(); showReset(true); };
+  $('backToLogin').onclick = (e) => { e.preventDefault(); showReset(false); };
+  async function sendCode(btn) {
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/auth/reset/request', { method: 'POST' }); const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      $('sentMsg').textContent = 'Code sent to ' + d.sentTo + '. It expires in 10 minutes.';
+      $('resetStep1').style.display = 'none'; $('resetStep2').style.display = 'block'; $('r_code').focus();
+    } catch (e) { const el = $('resetStep2').style.display === 'none' ? $('rerr1') : $('rerr2'); el.textContent = e.message; el.style.display = 'block'; }
+    btn.disabled = false;
+  }
+  $('sendCode').onclick = () => sendCode($('sendCode'));
+  $('resendCode').onclick = (e) => { e.preventDefault(); sendCode($('resendCode')); };
+  $('confirmReset').onclick = async () => {
+    const el = $('rerr2'); el.style.display = 'none';
+    if ($('r_pw').value !== $('r_pw2').value) { el.textContent = 'Passwords do not match.'; el.style.display = 'block'; return; }
+    $('confirmReset').disabled = true;
+    try {
+      const r = await fetch('/api/auth/reset/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: $('r_code').value, newPassword: $('r_pw').value }) });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error);
+      key = $('r_pw').value; sessionStorage.setItem(KEY, key); showReset(false); $('key').value = ''; load();
+    } catch (e) { el.textContent = e.message; el.style.display = 'block'; }
+    $('confirmReset').disabled = false;
+  };
+  $('changePw').onclick = async () => {
+    $('cerr').style.display = 'none'; $('cok').style.display = 'none';
+    if ($('c_new').value !== $('c_new2').value) { $('cerr').textContent = 'New passwords do not match.'; $('cerr').style.display = 'block'; return; }
+    try {
+      await api('/api/admin/password', { method: 'POST', body: JSON.stringify({ current: $('c_cur').value, newPassword: $('c_new').value }) });
+      key = $('c_new').value; sessionStorage.setItem(KEY, key);
+      $('c_cur').value = $('c_new').value = $('c_new2').value = ''; $('cok').style.display = 'block'; setTimeout(() => $('cok').style.display = 'none', 3000);
+    } catch (e) { $('cerr').textContent = e.message; $('cerr').style.display = 'block'; }
   };
 
   // ---- auth
